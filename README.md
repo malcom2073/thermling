@@ -9,6 +9,16 @@ This is an independent tool built from the protocol documentation and example
 script in [`nelko-p21-print`](../nelko-p21-print). It is not affiliated with
 Nelko.
 
+## Screenshots
+
+![Thermling main window](MainApp.png)
+
+*The composer, inspector, and live 1-bit print preview.*
+
+<img src="label.jpeg" alt="A printed label made with Thermling" width="520">
+
+*A label composed in Thermling and printed on a Nelko P21.*
+
 ## Features
 
 - Visual composer with draggable, resizable text and image elements
