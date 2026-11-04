@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from labelwright import app as app_module
 from labelwright.protocol import DEFAULT_DEVICE
 from labelwright.settings import AppSettings
 from labelwright.transport import BACKEND_SERIAL, BACKEND_SOCKET
@@ -60,3 +61,59 @@ def test_settings_null_device_falls_back(qapp):
     settings.device = "   "
     settings.save()
     assert AppSettings.load().device == DEFAULT_DEVICE
+
+
+def test_legacy_settings_are_migrated(monkeypatch):
+    current: dict[str, object] = {}
+    legacy: dict[str, object] = {
+        "printer/mac": "E4:53:A2:5F:F1:E7",
+        "printer/backend": BACKEND_SOCKET,
+        "window/geometry": b"geometry",
+    }
+
+    class FakeSettings:
+        def __init__(self, organization: str | None = None, application: str = "") -> None:
+            self.store = legacy if organization else current
+
+        def allKeys(self):
+            return list(self.store)
+
+        def value(self, key: str):
+            return self.store.get(key)
+
+        def setValue(self, key: str, value: object) -> None:
+            self.store[key] = value
+
+        def sync(self) -> None:
+            pass
+
+    monkeypatch.setattr(app_module, "QSettings", FakeSettings)
+    app_module._migrate_legacy_settings()
+
+    assert current == legacy
+
+
+def test_legacy_migration_does_not_overwrite_existing_settings(monkeypatch):
+    current: dict[str, object] = {"printer/mac": "AA:BB:CC:DD:EE:FF"}
+    legacy: dict[str, object] = {"printer/mac": "E4:53:A2:5F:F1:E7"}
+
+    class FakeSettings:
+        def __init__(self, organization: str | None = None, application: str = "") -> None:
+            self.store = legacy if organization else current
+
+        def allKeys(self):
+            return list(self.store)
+
+        def value(self, key: str):
+            return self.store.get(key)
+
+        def setValue(self, key: str, value: object) -> None:
+            self.store[key] = value
+
+        def sync(self) -> None:
+            pass
+
+    monkeypatch.setattr(app_module, "QSettings", FakeSettings)
+    app_module._migrate_legacy_settings()
+
+    assert current == {"printer/mac": "AA:BB:CC:DD:EE:FF"}
