@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from labelwright import transport as transport_module
-from labelwright.transport import (
+from thermling import transport as transport_module
+from thermling.transport import (
     BACKEND_SERIAL,
     BACKEND_SOCKET,
     Device,

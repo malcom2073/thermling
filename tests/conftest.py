@@ -4,8 +4,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QCoreApplication, QSettings  # noqa: E402
 
-QCoreApplication.setOrganizationName("LabelwrightTests")
-QCoreApplication.setApplicationName("LabelwrightTests")
+QCoreApplication.setOrganizationName("ThermlingTests")
+QCoreApplication.setApplicationName("ThermlingTests")
 
 import pytest  # noqa: E402
 

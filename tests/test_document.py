@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from labelwright.document import (
+from thermling.document import (
     DEFAULT_FONT,
     LABEL_PRESETS,
     SCHEMA_VERSION,
@@ -20,7 +20,7 @@ from labelwright.document import (
     TextElement,
     VerticalAlign,
 )
-from labelwright.protocol import Style
+from thermling.protocol import Style
 
 TINY_PNG_BASE64 = base64.b64encode(b"not really a png").decode("ascii")
 

@@ -1,6 +1,6 @@
-# Labelwright
+# Thermling
 
-Labelwright is a Linux label app for Nelko P21/P22 thermal label printers,
+Thermling is a Linux label app for Nelko P21/P22 thermal label printers,
 written in Python with PySide6. Lay out text and images on a label in
 millimetres, see a faithful 1-bit preview of what the print head will produce,
 and send it over Bluetooth.
@@ -51,9 +51,9 @@ uv sync
 Run the app:
 
 ```bash
-uv run labelwright
+uv run thermling
 # or
-uv run python -m labelwright
+uv run python -m thermling
 ```
 
 ## Bluetooth notes
@@ -104,7 +104,7 @@ covered by tests. No printer is required.
 ## Project layout
 
 ```
-src/labelwright/
+src/thermling/
   protocol.py      printer commands, CRC, response decoding, job builder
   document.py      JSON document model (text/image elements, label settings)
   render.py        millimetre document -> 1-bpp printer bitmap

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from labelwright.protocol import (
+from thermling.protocol import (
     Battery,
     Color,
     ProtocolError,

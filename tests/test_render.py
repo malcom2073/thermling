@@ -6,7 +6,7 @@ import pytest
 from PySide6.QtCore import QBuffer, QIODevice, QRectF, Qt
 from PySide6.QtGui import QColor, QImage
 
-from labelwright.document import (
+from thermling.document import (
     Halftone,
     ImageElement,
     ImageFit,
@@ -14,7 +14,7 @@ from labelwright.document import (
     Orientation,
     TextElement,
 )
-from labelwright.render import (
+from thermling.render import (
     RenderError,
     binarize,
     decode_image,

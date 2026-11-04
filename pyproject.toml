@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "labelwright"
+name = "thermling"
 version = "0.1.0"
 description = "Linux label app for Nelko P21/P22 thermal printers"
 readme = "README.md"
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-labelwright = "labelwright.app:main"
+thermling = "thermling.app:main"
 
 [dependency-groups]
 dev = [
@@ -25,7 +25,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/labelwright"]
+packages = ["src/thermling"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

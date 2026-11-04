@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from labelwright import app as app_module
-from labelwright.protocol import DEFAULT_DEVICE
-from labelwright.settings import AppSettings
-from labelwright.transport import BACKEND_SERIAL, BACKEND_SOCKET
+from thermling import app as app_module
+from thermling.protocol import DEFAULT_DEVICE
+from thermling.settings import AppSettings
+from thermling.transport import BACKEND_SERIAL, BACKEND_SOCKET
 
 
 def test_settings_round_trip(qapp):
@@ -63,17 +63,14 @@ def test_settings_null_device_falls_back(qapp):
     assert AppSettings.load().device == DEFAULT_DEVICE
 
 
-def test_legacy_settings_are_migrated(monkeypatch):
-    current: dict[str, object] = {}
-    legacy: dict[str, object] = {
-        "printer/mac": "E4:53:A2:5F:F1:E7",
-        "printer/backend": BACKEND_SOCKET,
-        "window/geometry": b"geometry",
-    }
-
+def _install_fake_settings(
+    monkeypatch,
+    current: dict[str, object],
+    legacy_stores: dict[str, dict[str, object]],
+) -> None:
     class FakeSettings:
         def __init__(self, organization: str | None = None, application: str = "") -> None:
-            self.store = legacy if organization else current
+            self.store = current if organization is None else legacy_stores[organization]
 
         def allKeys(self):
             return list(self.store)
@@ -88,32 +85,39 @@ def test_legacy_settings_are_migrated(monkeypatch):
             pass
 
     monkeypatch.setattr(app_module, "QSettings", FakeSettings)
+
+
+def test_legacy_settings_are_migrated(monkeypatch):
+    current: dict[str, object] = {}
+    legacy_stores = {
+        "Labelwright": {
+            "printer/mac": "E4:53:A2:5F:F1:E7",
+            "window/geometry": b"geometry",
+        },
+        "LabelPrinter": {
+            "printer/mac": "AA:BB:CC:DD:EE:FF",
+            "printer/backend": BACKEND_SOCKET,
+        },
+    }
+    _install_fake_settings(monkeypatch, current, legacy_stores)
+
     app_module._migrate_legacy_settings()
 
-    assert current == legacy
+    assert current == {
+        "printer/mac": "E4:53:A2:5F:F1:E7",
+        "window/geometry": b"geometry",
+        "printer/backend": BACKEND_SOCKET,
+    }
 
 
 def test_legacy_migration_does_not_overwrite_existing_settings(monkeypatch):
     current: dict[str, object] = {"printer/mac": "AA:BB:CC:DD:EE:FF"}
-    legacy: dict[str, object] = {"printer/mac": "E4:53:A2:5F:F1:E7"}
+    legacy_stores = {
+        "Labelwright": {"printer/mac": "E4:53:A2:5F:F1:E7"},
+        "LabelPrinter": {"printer/backend": BACKEND_SOCKET},
+    }
+    _install_fake_settings(monkeypatch, current, legacy_stores)
 
-    class FakeSettings:
-        def __init__(self, organization: str | None = None, application: str = "") -> None:
-            self.store = legacy if organization else current
-
-        def allKeys(self):
-            return list(self.store)
-
-        def value(self, key: str):
-            return self.store.get(key)
-
-        def setValue(self, key: str, value: object) -> None:
-            self.store[key] = value
-
-        def sync(self) -> None:
-            pass
-
-    monkeypatch.setattr(app_module, "QSettings", FakeSettings)
     app_module._migrate_legacy_settings()
 
     assert current == {"printer/mac": "AA:BB:CC:DD:EE:FF"}

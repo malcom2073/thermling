@@ -8,7 +8,7 @@ from PySide6.QtCore import QPointF, QRectF
 from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QDialog
 
-from labelwright.document import (
+from thermling.document import (
     LABEL_PRESETS,
     Halftone,
     HorizontalAlign,
@@ -19,19 +19,19 @@ from labelwright.document import (
     TextElement,
     VerticalAlign,
 )
-from labelwright.protocol import Battery, Color, Config, LabelRoll, Status, Style
-from labelwright.render import render_document
-from labelwright.settings import AppSettings
-from labelwright.transport import BACKEND_SOCKET, Device
-from labelwright.ui.main_window import MainWindow, _image_to_png_base64, _replace_image_data
-from labelwright.ui.preferences import PreferencesDialog
-from labelwright.ui.preview import PreviewPanel
-from labelwright.ui.printer_panel import PrinterPanel
+from thermling.protocol import Battery, Color, Config, LabelRoll, Status, Style
+from thermling.render import render_document
+from thermling.settings import AppSettings
+from thermling.transport import BACKEND_SOCKET, Device
+from thermling.ui.main_window import MainWindow, _image_to_png_base64, _replace_image_data
+from thermling.ui.preferences import PreferencesDialog
+from thermling.ui.preview import PreviewPanel
+from thermling.ui.printer_panel import PrinterPanel
 
 
 @pytest.fixture()
 def window(qtbot, monkeypatch):
-    monkeypatch.setattr("labelwright.ui.printer_panel.list_paired_devices", lambda: [])
+    monkeypatch.setattr("thermling.ui.printer_panel.list_paired_devices", lambda: [])
     window = MainWindow()
     window.show()
     try:
@@ -44,7 +44,7 @@ def window(qtbot, monkeypatch):
 
 
 def test_main_window_starts_with_default_document(window: MainWindow):
-    assert window.windowTitle().endswith("Untitled — Labelwright")
+    assert window.windowTitle().endswith("Untitled — Thermling")
     assert window.controller.document.width_mm == 14
     assert window.canvas.page_width_mm == 12
     assert window.canvas.page_height_mm == 40
@@ -358,7 +358,7 @@ def test_preview_panel_roll_warning(qtbot):
 def test_printer_panel_device_and_errors(qtbot, monkeypatch):
     devices = [Device("E4:53:A2:5F:F1:E7", "P21"), Device("AA:BB:CC:DD:EE:FF", "Other")]
     monkeypatch.setattr(
-        "labelwright.ui.printer_panel.list_paired_devices", lambda: devices
+        "thermling.ui.printer_panel.list_paired_devices", lambda: devices
     )
     panel = PrinterPanel()
     qtbot.addWidget(panel)
@@ -450,7 +450,7 @@ def test_preferences_dialog_accepts_values(qtbot):
 def test_preferences_dialog_rejects_invalid_mac(qtbot, monkeypatch):
     warnings: list[str] = []
     monkeypatch.setattr(
-        "labelwright.ui.preferences.QMessageBox.warning",
+        "thermling.ui.preferences.QMessageBox.warning",
         lambda *args: warnings.append(args[2]),
     )
     dialog = PreferencesDialog(AppSettings())
