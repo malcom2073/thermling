@@ -3,10 +3,10 @@ from __future__ import annotations
 import pytest
 from PySide6.QtGui import QPalette
 
-from labelprinter import theme as theme_module
-from labelprinter.document import LabelDocument, TextElement
-from labelprinter.render import render_document
-from labelprinter.theme import (
+from labelwright import theme as theme_module
+from labelwright.document import LabelDocument, TextElement
+from labelwright.render import render_document
+from labelwright.theme import (
     DARK_THEME,
     LIGHT_THEME,
     PAGE_WHITE,
@@ -16,7 +16,7 @@ from labelprinter.theme import (
     current_theme,
     refresh_theme,
 )
-from labelprinter.ui.main_window import MainWindow
+from labelwright.ui.main_window import MainWindow
 
 
 @pytest.fixture()
@@ -61,7 +61,7 @@ def test_apply_theme_updates_palette_and_current_theme(themed_app):
 
 
 def test_canvas_page_stays_white_in_dark_theme(monkeypatch, themed_app):
-    monkeypatch.setattr("labelprinter.ui.printer_panel.list_paired_devices", lambda: [])
+    monkeypatch.setattr("labelwright.ui.printer_panel.list_paired_devices", lambda: [])
     apply_theme(themed_app, DARK_THEME)
     window = MainWindow()
     try:
@@ -76,7 +76,7 @@ def test_canvas_page_stays_white_in_dark_theme(monkeypatch, themed_app):
 
 
 def test_refresh_theme_repaints_existing_custom_widgets(monkeypatch, themed_app):
-    monkeypatch.setattr("labelprinter.ui.printer_panel.list_paired_devices", lambda: [])
+    monkeypatch.setattr("labelwright.ui.printer_panel.list_paired_devices", lambda: [])
     window = MainWindow()
     try:
         monkeypatch.setattr(theme_module, "detect_theme", lambda _app: DARK_THEME)

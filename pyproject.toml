@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "labelprinter"
+name = "labelwright"
 version = "0.1.0"
-description = "Visual label composer for Nelko P21/P22 thermal label printers"
+description = "Linux label app for Nelko P21/P22 thermal printers"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-labelprinter = "labelprinter.app:main"
+labelwright = "labelwright.app:main"
 
 [dependency-groups]
 dev = [
@@ -25,7 +25,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/labelprinter"]
+packages = ["src/labelwright"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

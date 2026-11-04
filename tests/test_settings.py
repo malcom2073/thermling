@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from labelprinter.protocol import DEFAULT_DEVICE
-from labelprinter.settings import AppSettings
-from labelprinter.transport import BACKEND_SERIAL, BACKEND_SOCKET
+from labelwright.protocol import DEFAULT_DEVICE
+from labelwright.settings import AppSettings
+from labelwright.transport import BACKEND_SERIAL, BACKEND_SOCKET
 
 
 def test_settings_round_trip(qapp):

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from labelprinter.controller import DocumentController
-from labelprinter.document import ImageElement, LabelDocument, TextElement
+from labelwright.controller import DocumentController
+from labelwright.document import ImageElement, LabelDocument, TextElement
 
 
 @pytest.fixture()

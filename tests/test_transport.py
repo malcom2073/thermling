@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from labelprinter import transport as transport_module
-from labelprinter.transport import (
+from labelwright import transport as transport_module
+from labelwright.transport import (
     BACKEND_SERIAL,
     BACKEND_SOCKET,
     Device,

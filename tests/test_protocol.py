@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from labelprinter.protocol import (
+from labelwright.protocol import (
     Battery,
     Color,
     ProtocolError,

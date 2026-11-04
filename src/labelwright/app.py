@@ -18,12 +18,12 @@ def main() -> int:
     # Let Ctrl+C terminate the Qt event loop from a terminal.
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-    QCoreApplication.setOrganizationName("LabelPrinter")
-    QCoreApplication.setOrganizationDomain("labelprinter.local")
-    QCoreApplication.setApplicationName("LabelPrinter")
+    QCoreApplication.setOrganizationName("Labelwright")
+    QCoreApplication.setOrganizationDomain("labelwright.local")
+    QCoreApplication.setApplicationName("Labelwright")
 
     app = QApplication(sys.argv)
-    app.setApplicationDisplayName("Label Printer")
+    app.setApplicationDisplayName("Labelwright")
     initial_theme = detect_theme(app)
     app.setStyle("Fusion")
     install_theme(app, initial_theme)

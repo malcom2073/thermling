@@ -170,7 +170,7 @@ class MainWindow(QMainWindow):
         return action
 
     def _build_ui(self) -> None:
-        self.setWindowTitle("Label Printer")
+        self.setWindowTitle("Labelwright")
         self.resize(1280, 860)
 
         self.canvas = CanvasView(self.controller, self)
@@ -495,7 +495,7 @@ class MainWindow(QMainWindow):
     def _update_window_title(self, *_: object) -> None:
         name = self._document_path.name if self._document_path else "Untitled"
         marker = " *" if self.controller.is_dirty else ""
-        self.setWindowTitle(f"{name}{marker} — Label Printer")
+        self.setWindowTitle(f"{name}{marker} — Labelwright")
         self.document_status.setText(f"{name}{marker}")
 
     def _update_size_status(self) -> None:
@@ -878,8 +878,8 @@ class MainWindow(QMainWindow):
     def _show_about(self) -> None:
         QMessageBox.about(
             self,
-            "About Label Printer",
-            "<h3>Label Printer</h3>"
+            "About Labelwright",
+            "<h3>Labelwright</h3>"
             "<p>A Qt 6 label composer for Nelko P21/P22 thermal printers.</p>"
             "<p>Protocol documentation and the reference implementation come from "
             "the <code>nelko-p21-print</code> project. Text is rasterised locally; "

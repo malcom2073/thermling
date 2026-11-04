@@ -1,9 +1,9 @@
-# Label Printer
+# Labelwright
 
-A Qt 6 desktop label composer for Nelko P21/P22 thermal label printers, written
-in Python with PySide6. Lay out text and images on a label in millimetres, see a
-faithful 1-bit preview of what the print head will produce, and send it over
-Bluetooth.
+Labelwright is a Linux label app for Nelko P21/P22 thermal label printers,
+written in Python with PySide6. Lay out text and images on a label in
+millimetres, see a faithful 1-bit preview of what the print head will produce,
+and send it over Bluetooth.
 
 This is an independent tool built from the protocol documentation and example
 script in [`nelko-p21-print`](../nelko-p21-print). It is not affiliated with
@@ -51,9 +51,9 @@ uv sync
 Run the app:
 
 ```bash
-uv run labelprinter
+uv run labelwright
 # or
-uv run python -m labelprinter
+uv run python -m labelwright
 ```
 
 ## Bluetooth notes
@@ -104,7 +104,7 @@ covered by tests. No printer is required.
 ## Project layout
 
 ```
-src/labelprinter/
+src/labelwright/
   protocol.py      printer commands, CRC, response decoding, job builder
   document.py      JSON document model (text/image elements, label settings)
   render.py        millimetre document -> 1-bpp printer bitmap

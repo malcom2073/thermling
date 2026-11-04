@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from labelprinter.document import (
+from labelwright.document import (
     DEFAULT_FONT,
     LABEL_PRESETS,
     SCHEMA_VERSION,
@@ -20,7 +20,7 @@ from labelprinter.document import (
     TextElement,
     VerticalAlign,
 )
-from labelprinter.protocol import Style
+from labelwright.protocol import Style
 
 TINY_PNG_BASE64 = base64.b64encode(b"not really a png").decode("ascii")
 
