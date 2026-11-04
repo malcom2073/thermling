@@ -6,8 +6,9 @@ millimetres, see a faithful 1-bit preview of what the print head will produce,
 and send it over Bluetooth.
 
 This is an independent tool built from the protocol documentation and example
-script in [`nelko-p21-print`](../nelko-p21-print). It is not affiliated with
-Nelko.
+script in
+[`nelko-p21-print`](https://github.com/merlinschumacher/nelko-p21-print). It is
+not affiliated with Nelko.
 
 ## Screenshots
 
