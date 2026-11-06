@@ -84,27 +84,48 @@ grant the **Nearby devices** permission when prompted.
 
 Build prerequisites:
 
-- A Unix host (Linux or macOS) with JDK 17 (`python-for-android` accepts this major version)
-- Android SDK, build-tools, platform tools and NDK for your Qt version
-- PySide6 and Shiboken **Android** wheels for `aarch64` (debug APK target)
+- A Unix host (Linux or macOS) with **JDK 17**. `python-for-android` is pinned
+  to that major version, so a newer JDK makes the build stop.
+- Android SDK, build-tools, platform-tools and NDK r28c
+- PySide6 and Shiboken **Android** wheels for `aarch64` (the debug APK target)
 
-Install the deployment dependencies and fetch matching Android wheels:
+If your system only has a newer JDK, install JDK 17 in user space:
+
+```bash
+mkdir -p ~/.local/opt
+curl -L 'https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse' \
+  -o /tmp/jdk17.tar.gz
+tar -xzf /tmp/jdk17.tar.gz -C ~/.local/opt
+export JAVA_HOME="$(find ~/.local/opt -maxdepth 1 -type d -name 'jdk-17*' | head -n1)"
+export PATH="$JAVA_HOME/bin:$PATH"
+java -version   # should report 17
+```
+
+On Debian/Ubuntu with sudo, `sudo apt install openjdk-17-jdk` is equivalent.
+
+Install the deployment dependencies and fetch matching Android wheels from
+Qt's public download server. Run the downloads in the directory where you want
+to keep the wheels:
 
 ```bash
 uv sync --group android
 
-# Alternatively download both wheels from the Qt for Python downloads page.
-uv tool install qtpip
-qtpip download PySide6 --android --arch aarch64
-qtpip download shiboken6 --android --arch aarch64
+mkdir -p ~/Downloads/thermling-android
+cd ~/Downloads/thermling-android
+curl -LO https://download.qt.io/official_releases/QtForPython/pyside6/pyside6-6.12.0-6.12.0-cp310-abi3-android_aarch64.whl
+curl -LO https://download.qt.io/official_releases/QtForPython/shiboken6/shiboken6-6.12.0-6.12.0-cp310-abi3-android_aarch64.whl
+cd -
 ```
 
-The easiest way to get the Android NDK/SDK is Qt's download script:
+The easiest way to get the Android NDK/SDK is Qt's download script. Run this
+from the Thermling checkout; it stores both under `~/.pyside6_android_deploy`,
+where the deploy tool finds them automatically:
 
 ```bash
-git clone https://code.qt.io/pyside/pyside-setup
-cd pyside-setup
-python3 tools/cross_compile_android/main.py --download-only --skip-update --auto-accept-license
+git clone --depth 1 https://code.qt.io/pyside/pyside-setup ~/.cache/pyside-setup
+uv run --group android python \
+  ~/.cache/pyside-setup/tools/cross_compile_android/main.py \
+  --download-only --skip-update --auto-accept-license -p aarch64
 ```
 
 Then build from this repository (paths vary by wheel version):
@@ -112,8 +133,8 @@ Then build from this repository (paths vary by wheel version):
 ```bash
 uv run pyside6-android-deploy \
   --config-file pysidedeploy.spec \
-  --wheel-pyside ~/Downloads/pyside6-6.12.0-6.12.0-cp310-abi3-android_aarch64.whl \
-  --wheel-shiboken ~/Downloads/shiboken6-6.12.0-6.12.0-cp310-abi3-android_aarch64.whl
+  --wheel-pyside ~/Downloads/thermling-android/pyside6-6.12.0-6.12.0-cp310-abi3-android_aarch64.whl \
+  --wheel-shiboken ~/Downloads/thermling-android/shiboken6-6.12.0-6.12.0-cp310-abi3-android_aarch64.whl
 ```
 
 `pysidedeploy.spec` produces a debug APK in `dist/`. Install it with
