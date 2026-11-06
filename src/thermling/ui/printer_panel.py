@@ -18,12 +18,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..permissions import bluetooth_permission_status, request_bluetooth_permission
 from ..protocol import Battery, Config, LabelRoll, Status, describe_status
+from ..runtime import ANDROID
 from ..theme import repolish
 from ..transport import (
     BACKEND_LABELS,
     BACKEND_SERIAL,
-    BACKEND_SOCKET,
+    DEFAULT_BACKEND,
     MAC_PATTERN,
     list_paired_devices,
 )
@@ -80,7 +82,11 @@ class PrinterPanel(QWidget):
         self.device_path_edit.setToolTip(
             "RFCOMM tty to open. Only used by the serial transport."
         )
-        device_form.addRow("Device", self.device_path_edit)
+        device_path_label = QLabel("Device", self)
+        device_form.addRow(device_path_label, self.device_path_edit)
+        if ANDROID:
+            device_path_label.hide()
+            self.device_path_edit.hide()
         connection_layout.addLayout(device_form)
 
         self.connect_button = QPushButton("Connect", self)
@@ -94,9 +100,14 @@ class PrinterPanel(QWidget):
         connection_layout.addWidget(self.error_label)
 
         note = QLabel(
-            "The printer accepts one Bluetooth connection at a time. "
-            "“Take over existing link” in Preferences lets the app replace a "
-            "Blueman/kbluetooth connection.",
+            "On Android, pair the printer in the system Bluetooth settings first, "
+            "then tap Scan. The printer accepts one Bluetooth connection at a time."
+            if ANDROID
+            else (
+                "The printer accepts one Bluetooth connection at a time. "
+                "“Take over existing link” in Preferences lets the app replace a "
+                "Blueman/kbluetooth connection."
+            ),
             self,
         )
         note.setWordWrap(True)
@@ -169,7 +180,7 @@ class PrinterPanel(QWidget):
 
         # --- wiring ----------------------------------------------------------
         self.connect_button.clicked.connect(self._on_connect_clicked)
-        self.scan_button.clicked.connect(self._populate_devices)
+        self.scan_button.clicked.connect(self._scan_devices)
         self.refresh_button.clicked.connect(self.refreshRequested.emit)
         self.self_test_button.clicked.connect(self.selfTestRequested.emit)
         self.preferences_button = preferences_button
@@ -204,7 +215,7 @@ class PrinterPanel(QWidget):
 
     def backend(self) -> str:
         value = self.backend_combo.currentData()
-        return str(value) if value else BACKEND_SOCKET
+        return str(value) if value else DEFAULT_BACKEND
 
     def device(self) -> str:
         return self.device_path_edit.text().strip() or "/dev/rfcomm0"
@@ -312,12 +323,59 @@ class PrinterPanel(QWidget):
         self.state_dot.setProperty("state", state)
         repolish(self.state_dot)
 
+    def _scan_devices(self, checked: bool = False) -> None:
+        del checked  # QPushButton.clicked passes a bool
+        if (
+            ANDROID
+            and bluetooth_permission_status() != Qt.PermissionStatus.Granted
+        ):
+            self.error_label.hide()
+            self.scan_button.setEnabled(False)
+            request_bluetooth_permission(self, self._scan_after_permission)
+            return
+        self._run_scan()
+
+    def _scan_after_permission(self, granted: bool) -> None:
+        if not granted:
+            self.scan_button.setEnabled(not self._connected)
+            self.error_label.setText(
+                "Bluetooth permission was denied. Grant “Nearby devices” access "
+                "to Thermling in Android settings and try again."
+            )
+            self.error_label.show()
+            return
+        self._run_scan()
+
+    def _run_scan(self) -> None:
+        self.scan_button.setEnabled(False)
+        self.scan_button.setText("…")
+        try:
+            self._populate_devices(scan=True)
+            if self.device_combo.count() == 0:
+                self.error_label.setText(
+                    "No Bluetooth devices found. Pair the printer in Android's "
+                    "Bluetooth settings and make sure Bluetooth is turned on."
+                    if ANDROID
+                    else "No paired Bluetooth devices found."
+                )
+                self.error_label.show()
+            else:
+                self.error_label.hide()
+        finally:
+            self.scan_button.setEnabled(not self._connected)
+            self.scan_button.setText("Scan")
+
     def _populate_devices(
-        self, checked: bool = False, preferred_mac: str | None = None
+        self,
+        checked: bool = False,
+        preferred_mac: str | None = None,
+        scan: bool | None = None,
     ) -> None:
         del checked  # QPushButton.clicked passes a bool
+        if scan is None:
+            scan = not ANDROID
         preferred = preferred_mac or self.current_mac()
-        devices = list_paired_devices()
+        devices = list_paired_devices() if scan else []
         self.device_combo.blockSignals(True)
         try:
             self.device_combo.clear()

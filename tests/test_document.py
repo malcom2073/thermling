@@ -261,6 +261,18 @@ def test_save_and_load(tmp_path: Path):
     assert loaded.to_dict() == document.to_dict()
 
 
+def test_save_and_load_file_uri(tmp_path: Path):
+    document = LabelDocument(name="URI label", elements=[TextElement(text="Hello")])
+    path = tmp_path / "uri.label.json"
+    uri = path.as_uri()
+
+    document.save(uri)
+    loaded = LabelDocument.load(uri)
+
+    assert loaded.to_dict() == document.to_dict()
+    assert path.exists()
+
+
 def test_load_invalid_json(tmp_path: Path):
     path = tmp_path / "broken.json"
     path.write_text("{not json", encoding="utf-8")

@@ -7,6 +7,8 @@ the small facade the main window talks to.
 
 from __future__ import annotations
 
+from collections import deque
+from collections.abc import Callable
 from contextlib import suppress
 
 from PySide6.QtCore import QMetaObject, QObject, Qt, QThread, Signal, Slot
@@ -56,10 +58,24 @@ class PrinterWorker(QObject):
     def __init__(self) -> None:
         super().__init__()
         self._transport: BaseTransport | None = None
+        # QtBluetooth uses nested event loops, which can dispatch more slots to
+        # this thread while an operation is still running.  Re-entrant requests
+        # are queued and run after the current operation instead of interleaving
+        # reads on the same socket.
+        self._busy = False
+        self._pending: deque[Callable[[], None]] = deque()
+        self._queued_prints = 0
+        self._disconnect_pending = False
 
     # --- connection ----------------------------------------------------------
     @Slot(dict)
     def connect_to(self, options: dict) -> None:
+        if self._busy:
+            # A connection attempt is already in flight; don't start a second
+            # one on top of it.
+            return
+        self._busy = True
+        self._disconnect_pending = False
         self._close_transport()
         try:
             mac = normalize_mac(str(options.get("mac", "")))
@@ -69,21 +85,35 @@ class PrinterWorker(QObject):
             if take_over and backend == "socket":
                 disconnect_bluetooth(mac)
             transport = make_transport(backend, mac, device)
-            transport.open()
             self._transport = transport
+            transport.open()
+            if self._disconnect_pending:
+                return
             self.connected.emit(mac)
             self._refresh_all()
         except Exception as error:  # noqa: BLE001 - report every connection failure
             self._close_transport()
-            self.connectionFailed.emit(str(error))
+            if not self._disconnect_pending:
+                self.connectionFailed.emit(str(error))
+        finally:
+            self._finish_operation()
 
     @Slot()
     def disconnect_from(self) -> None:
+        self._clear_pending()
+        if self._busy:
+            # A nested QtBluetooth wait is active; closing the socket wakes it.
+            # Report the disconnect once the current operation unwinds.
+            self._disconnect_pending = True
+            self._close_transport()
+            return
         self._close_transport()
         self.disconnected.emit()
 
     @Slot()
     def shutdown(self) -> None:
+        self._clear_pending(cancelled=False)
+        self._disconnect_pending = False
         self._close_transport()
 
     def _close_transport(self) -> None:
@@ -92,13 +122,42 @@ class PrinterWorker(QObject):
                 self._transport.close()
             self._transport = None
 
+    def _defer(self, operation: Callable[[], None]) -> None:
+        self._pending.append(operation)
+
+    def _clear_pending(self, *, cancelled: bool = True) -> None:
+        self._pending.clear()
+        if cancelled:
+            while self._queued_prints:
+                self._queued_prints -= 1
+                self.printFinished.emit(False, "Print cancelled")
+        else:
+            self._queued_prints = 0
+
+    def _finish_operation(self) -> None:
+        self._busy = False
+        if self._disconnect_pending:
+            self._disconnect_pending = False
+            self._clear_pending()
+            self._close_transport()
+            self.disconnected.emit()
+        while not self._busy and self._pending:
+            self._pending.popleft()()
+
     # --- queries -------------------------------------------------------------
     @Slot()
     def refresh(self) -> None:
+        if self._busy:
+            self._defer(self.refresh)
+            return
         if self._transport is None:
             self.error.emit("Not connected to the printer")
             return
-        self._refresh_all()
+        self._busy = True
+        try:
+            self._refresh_all()
+        finally:
+            self._finish_operation()
 
     def _refresh_all(self) -> None:
         queries = (
@@ -139,9 +198,14 @@ class PrinterWorker(QObject):
     # --- actions -------------------------------------------------------------
     @Slot(bytes)
     def print_job(self, payload: bytes) -> None:
+        if self._busy:
+            self._queued_prints += 1
+            self._defer(lambda: self._run_queued_print(payload))
+            return
         if self._transport is None:
             self.printFinished.emit(False, "Not connected to the printer")
             return
+        self._busy = True
         try:
             status = self._query_status()
             if status != Status.READY:
@@ -161,35 +225,60 @@ class PrinterWorker(QObject):
             self.printFinished.emit(True, "Print job sent")
         except (TransportError, ProtocolError) as error:
             self.printFinished.emit(False, str(error))
+        finally:
+            self._finish_operation()
+
+    def _run_queued_print(self, payload: bytes) -> None:
+        if self._queued_prints:
+            self._queued_prints -= 1
+        self.print_job(payload)
 
     @Slot(bool)
     def set_beep(self, enabled: bool) -> None:
+        if self._busy:
+            self._defer(lambda: self.set_beep(enabled))
+            return
+        self._busy = True
         try:
             self._send(b"BEEP " + bytes([1 if enabled else 0]) + b"\r\n", 0)
             self.configUpdated.emit(self._query_config())
             self.actionFinished.emit(f"Beep {'enabled' if enabled else 'disabled'}")
         except (TransportError, ProtocolError) as error:
             self.error.emit(str(error))
+        finally:
+            self._finish_operation()
 
     @Slot(int)
     def set_timer(self, minutes: int) -> None:
+        if self._busy:
+            self._defer(lambda: self.set_timer(minutes))
+            return
         if minutes not in MINUTES_TO_TIMER:
             self.error.emit(f"Unsupported auto-off value: {minutes}")
             return
+        self._busy = True
         try:
             self._send(b"TIMER " + bytes([MINUTES_TO_TIMER[minutes]]) + b"\r\n", 0)
             self.configUpdated.emit(self._query_config())
             self.actionFinished.emit("Auto power-off updated")
         except (TransportError, ProtocolError) as error:
             self.error.emit(str(error))
+        finally:
+            self._finish_operation()
 
     @Slot()
     def self_test(self) -> None:
+        if self._busy:
+            self._defer(self.self_test)
+            return
+        self._busy = True
         try:
             self._send(CMD_SELFTEST, 0)
             self.actionFinished.emit("Self-test page sent")
         except (TransportError, ProtocolError) as error:
             self.error.emit(str(error))
+        finally:
+            self._finish_operation()
 
 
 class PrinterService(QObject):

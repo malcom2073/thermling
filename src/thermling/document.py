@@ -17,12 +17,49 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from PySide6.QtCore import QFile, QIODevice, QUrl
+
 from .protocol import DEFAULT_HEAD_WIDTH_MM, Style, printable_width_mm
 
 SCHEMA_VERSION = 2
 
 DEFAULT_FONT = "DejaVu Sans"
 DEFAULT_FONT_SIZE_PT = 10.0
+
+
+def _local_location(path: str) -> str:
+    return QUrl(path).toLocalFile() if path.startswith("file:") else path
+
+
+def _read_text(path: str | Path) -> str:
+    location = str(path)
+    if not location.startswith("content:"):
+        return Path(_local_location(location)).read_text(encoding="utf-8")
+    file = QFile(location)
+    if not file.open(QIODevice.OpenModeFlag.ReadOnly):
+        raise OSError(file.errorString())
+    try:
+        return bytes(file.readAll()).decode("utf-8")
+    finally:
+        file.close()
+
+
+def _write_text(path: str | Path, text: str) -> None:
+    location = str(path)
+    if not location.startswith("content:"):
+        Path(_local_location(location)).write_text(text, encoding="utf-8")
+        return
+    file = QFile(location)
+    if not file.open(
+        QIODevice.OpenModeFlag.WriteOnly | QIODevice.OpenModeFlag.Truncate
+    ):
+        raise OSError(file.errorString())
+    try:
+        file.write(text.encode("utf-8"))
+        if not file.flush():
+            raise OSError(file.errorString())
+    finally:
+        file.close()
 
 
 class DocumentError(Exception):
@@ -325,15 +362,15 @@ class LabelDocument:
     # --- files ---------------------------------------------------------------
     def save(self, path: str | Path) -> None:
         self.validate()
-        Path(path).write_text(
-            json.dumps(self.to_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        _write_text(
+            path, json.dumps(self.to_dict(), indent=2, ensure_ascii=False) + "\n"
         )
 
     @classmethod
     def load(cls, path: str | Path) -> LabelDocument:
         try:
-            raw = Path(path).read_text(encoding="utf-8")
-        except OSError as error:
+            raw = _read_text(path)
+        except (OSError, UnicodeError) as error:
             raise DocumentError(f"Could not read {path}: {error}") from error
         try:
             data = json.loads(raw)

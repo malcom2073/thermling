@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
+    QLabel,
     QLineEdit,
     QMessageBox,
     QSpinBox,
@@ -20,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..protocol import DEFAULT_DPI
+from ..runtime import ANDROID
 from ..settings import AppSettings
 from ..transport import BACKEND_LABELS, BACKEND_SERIAL, MAC_PATTERN
 
@@ -28,7 +30,7 @@ class PreferencesDialog(QDialog):
     def __init__(self, settings: AppSettings, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Preferences")
-        self.setMinimumWidth(480)
+        self.setMinimumWidth(320 if ANDROID else 480)
         self.settings = copy.deepcopy(settings)
 
         layout = QVBoxLayout(self)
@@ -51,13 +53,17 @@ class PreferencesDialog(QDialog):
         connection_form.addRow("Transport", self.backend_combo)
 
         self.device_edit = QLineEdit(settings.device, self)
-        connection_form.addRow("Serial device", self.device_edit)
+        device_label = QLabel("Serial device", self)
+        connection_form.addRow(device_label, self.device_edit)
+        self.device_edit.setVisible(not ANDROID)
+        device_label.setVisible(not ANDROID)
 
         self.take_over_check = QCheckBox(
             "Disconnect an existing Bluetooth link before connecting", self
         )
         self.take_over_check.setChecked(settings.take_over)
         connection_form.addRow("", self.take_over_check)
+        self.take_over_check.setVisible(not ANDROID)
 
         self.auto_connect_check = QCheckBox("Connect automatically on startup", self)
         self.auto_connect_check.setChecked(settings.auto_connect)
@@ -109,7 +115,9 @@ class PreferencesDialog(QDialog):
         self._update_dpi_enabled()
 
     def _update_device_visibility(self) -> None:
-        self.device_edit.setEnabled(self.backend_combo.currentData() == BACKEND_SERIAL)
+        self.device_edit.setEnabled(
+            not ANDROID and self.backend_combo.currentData() == BACKEND_SERIAL
+        )
 
     def _update_dpi_enabled(self) -> None:
         self.dpi_spin.setEnabled(not self.auto_dpi_check.isChecked())

@@ -7,9 +7,12 @@ import pytest
 
 from thermling import transport as transport_module
 from thermling.transport import (
+    BACKEND_LABELS,
+    BACKEND_QT,
     BACKEND_SERIAL,
     BACKEND_SOCKET,
     Device,
+    QtBluetoothTransport,
     SerialTransport,
     SocketTransport,
     TransportError,
@@ -79,8 +82,83 @@ def test_make_transport():
     assert isinstance(serial_transport, SerialTransport)
     assert serial_transport.device == "/dev/ttyUSB7"
 
+    qt_transport = make_transport(BACKEND_QT, "E4:53:A2:5F:F1:E7")
+    assert isinstance(qt_transport, QtBluetoothTransport)
+    assert qt_transport.mac == "E4:53:A2:5F:F1:E7"
+
     with pytest.raises(ValueError, match="Unknown transport"):
         make_transport("carrier-pigeon")
+
+
+def test_desktop_backend_labels():
+    assert BACKEND_LABELS[BACKEND_SOCKET].startswith("Direct RFCOMM")
+    assert BACKEND_LABELS[BACKEND_SERIAL].startswith("Serial device")
+
+
+def test_qt_transport_friendly_errors():
+    permission = QtBluetoothTransport._friendly_error("Permission denied")
+    assert "permission" in permission.lower()
+    service = QtBluetoothTransport._friendly_error("Service not found")
+    assert "pair" in service.lower()
+    generic = QtBluetoothTransport._friendly_error("")
+    assert "Could not connect" in generic
+
+
+def test_qt_transport_can_use_prefilled_buffer():
+    transport = QtBluetoothTransport("E4:53:A2:5F:F1:E7")
+    transport._buffer.extend(b"OK\r\nPAYLOAD")
+    assert transport.read_line() == b"OK\r\n"
+    assert transport.read_exact(7) == b"PAYLOAD"
+    with pytest.raises(TransportError, match="Not connected"):
+        transport.read_exact(1, timeout=0)
+
+
+class PartialWriteSocket:
+    """Accepts zero bytes once, then swallows everything on later writes."""
+
+    def __init__(self) -> None:
+        self.sent = bytearray()
+        self.calls = 0
+
+    def write(self, payload: bytes) -> int:
+        self.calls += 1
+        if self.calls == 1:
+            return 0
+        self.sent.extend(payload)
+        return len(payload)
+
+    def bytesToWrite(self) -> int:
+        return 0
+
+    def errorString(self) -> str:
+        return "fake error"
+
+
+def test_qt_transport_retries_partial_writes(monkeypatch):
+    transport = QtBluetoothTransport("E4:53:A2:5F:F1:E7")
+    sock = PartialWriteSocket()
+    transport._socket = sock  # type: ignore[assignment]
+    monkeypatch.setattr(
+        QtBluetoothTransport, "is_open", property(lambda self: True)
+    )
+    monkeypatch.setattr(transport, "_wait_socket", lambda *args: True)
+
+    transport.write(b"print job")
+
+    assert bytes(sock.sent) == b"print job"
+    assert sock.calls == 2
+
+
+def test_qt_transport_reports_write_timeout(monkeypatch):
+    transport = QtBluetoothTransport("E4:53:A2:5F:F1:E7")
+    transport._socket = PartialWriteSocket()  # type: ignore[assignment]
+    monkeypatch.setattr(
+        QtBluetoothTransport, "is_open", property(lambda self: True)
+    )
+    monkeypatch.setattr(transport, "_wait_socket", lambda *args: False)
+
+    with pytest.raises(TransportError, match="Timed out sending"):
+        transport.write(b"print job")
 
 
 def test_socket_transport_framing_from_buffer():

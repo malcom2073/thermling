@@ -10,6 +10,8 @@ from PySide6.QtCore import QCoreApplication, QSettings
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
+from .permissions import request_bluetooth_permission
+from .runtime import ANDROID
 from .theme import detect_theme, install_theme
 from .ui.main_window import MainWindow
 
@@ -54,12 +56,18 @@ def main() -> int:
     app.setStyle("Fusion")
     install_theme(app, initial_theme)
 
-    icon_path = Path(__file__).parent / "assets" / "app.svg"
+    assets = Path(__file__).parent / "assets"
+    icon_path = assets / ("icon.png" if ANDROID else "app.svg")
+    if not icon_path.exists():
+        icon_path = assets / "app.svg"
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
 
     window = MainWindow()
     window.show()
+    if ANDROID:
+        # Ask once at startup; scanning and connecting request again if needed.
+        request_bluetooth_permission(window, lambda _granted: None)
     return app.exec()
 
 

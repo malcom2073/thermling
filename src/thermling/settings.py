@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from PySide6.QtCore import QSettings
 
 from .protocol import DEFAULT_DEVICE, DEFAULT_DPI, DEFAULT_HEAD_WIDTH_MM
-from .transport import BACKEND_LABELS, BACKEND_SOCKET
+from .transport import BACKEND_LABELS, DEFAULT_BACKEND
 
 
 def _as_bool(value: object, default: bool) -> bool:
@@ -41,7 +41,7 @@ def _clamp(value: float, low: float, high: float) -> float:
 @dataclass
 class AppSettings:
     mac: str = ""
-    backend: str = BACKEND_SOCKET
+    backend: str = DEFAULT_BACKEND
     device: str = DEFAULT_DEVICE
     take_over: bool = True
     auto_connect: bool = False
@@ -54,7 +54,7 @@ class AppSettings:
 
     def normalize(self) -> None:
         if self.backend not in BACKEND_LABELS:
-            self.backend = BACKEND_SOCKET
+            self.backend = DEFAULT_BACKEND
         self.dpi_override = int(_clamp(self.dpi_override, 50, 1200))
         self.head_width_mm = float(_clamp(self.head_width_mm, 5.0, 50.0))
         self.density = int(_clamp(self.density, 1, 15))
@@ -67,7 +67,7 @@ class AppSettings:
         settings = QSettings()
         result = cls(
             mac=str(settings.value("printer/mac", "")),
-            backend=str(settings.value("printer/backend", BACKEND_SOCKET)),
+            backend=str(settings.value("printer/backend", DEFAULT_BACKEND)),
             device=str(settings.value("printer/device", DEFAULT_DEVICE)),
             take_over=_as_bool(settings.value("printer/take_over", True), True),
             auto_connect=_as_bool(settings.value("printer/auto_connect", False), False),

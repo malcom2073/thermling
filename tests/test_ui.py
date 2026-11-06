@@ -4,7 +4,7 @@ import base64
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QPointF, QRectF
+from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QDialog
 
@@ -581,3 +581,102 @@ def test_add_text_respects_printable_width(window: MainWindow):
     assert element.width_mm <= 10.0
     assert element.x_mm >= 0
     assert element.x_mm + element.width_mm <= 12.0
+
+
+def test_android_mobile_shell(qtbot, monkeypatch):
+    monkeypatch.setattr("thermling.ui.main_window.ANDROID", True)
+    monkeypatch.setattr("thermling.ui.printer_panel.list_paired_devices", lambda: [])
+    mobile = MainWindow()
+    mobile.show()
+    try:
+        assert mobile.centralWidget() is mobile._tabs
+        assert mobile._tabs.count() == 4
+        assert mobile._tabs.tabText(0) == "Label"
+        assert mobile._tabs.tabText(3) == "Printer"
+        assert not mobile.document_status.isVisible()
+        mobile._show_mobile_tab(2)
+        assert mobile._tabs.currentIndex() == 2
+    finally:
+        mobile.controller.mark_saved()
+        mobile._service.stop()
+        mobile.close()
+        mobile.deleteLater()
+
+
+def test_android_scan_requests_permission_when_denied(qtbot, monkeypatch):
+    monkeypatch.setattr("thermling.ui.printer_panel.ANDROID", True)
+    monkeypatch.setattr(
+        "thermling.ui.printer_panel.bluetooth_permission_status",
+        lambda: Qt.PermissionStatus.Undetermined,
+    )
+    requested: list = []
+
+    def request(context, callback):
+        requested.append(context)
+        callback(False)
+
+    monkeypatch.setattr(
+        "thermling.ui.printer_panel.request_bluetooth_permission", request
+    )
+    panel = PrinterPanel()
+    qtbot.addWidget(panel)
+
+    panel._scan_devices()
+
+    assert requested
+    assert "permission" in panel.error_label.text().lower()
+    assert panel.error_label.isVisibleTo(panel)
+
+
+def test_android_scan_runs_after_permission_granted(qtbot, monkeypatch):
+    monkeypatch.setattr("thermling.ui.printer_panel.ANDROID", True)
+    monkeypatch.setattr(
+        "thermling.ui.printer_panel.bluetooth_permission_status",
+        lambda: Qt.PermissionStatus.Undetermined,
+    )
+    device = Device("E4:53:A2:5F:F1:E7", "P21")
+    monkeypatch.setattr(
+        "thermling.ui.printer_panel.list_paired_devices", lambda: [device]
+    )
+
+    def request(context, callback):
+        callback(True)
+
+    monkeypatch.setattr(
+        "thermling.ui.printer_panel.request_bluetooth_permission", request
+    )
+    panel = PrinterPanel()
+    qtbot.addWidget(panel)
+
+    panel._scan_devices()
+
+    assert panel.device_combo.count() == 1
+    assert panel.device_combo.currentData() == device.address
+    assert panel.scan_button.text() == "Scan"
+
+
+def test_connect_requests_android_permission(window: MainWindow, monkeypatch):
+    monkeypatch.setattr("thermling.ui.main_window.ANDROID", True)
+    monkeypatch.setattr(
+        "thermling.ui.main_window.bluetooth_permission_status",
+        lambda: Qt.PermissionStatus.Undetermined,
+    )
+    requested: list = []
+
+    def request(context, callback):
+        requested.append(context)
+        callback(False)
+
+    monkeypatch.setattr(
+        "thermling.ui.main_window.request_bluetooth_permission", request
+    )
+    monkeypatch.setattr(
+        "thermling.ui.main_window.QMessageBox.warning", lambda *args, **kwargs: None
+    )
+    sent: list = []
+    monkeypatch.setattr(window._service, "connect_to", lambda *args: sent.append(args))
+
+    window._connect_printer("E4:53:A2:5F:F1:E7", BACKEND_SOCKET, "/dev/rfcomm0")
+
+    assert requested
+    assert sent == []

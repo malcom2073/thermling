@@ -6,7 +6,7 @@ import base64
 from contextlib import suppress
 from pathlib import Path
 
-from PySide6.QtCore import QBuffer, QIODevice, QSettings, QSize, Qt, QTimer
+from PySide6.QtCore import QBuffer, QFile, QIODevice, QSettings, QSize, Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QCloseEvent, QIcon, QImageReader, QKeySequence
 from PySide6.QtWidgets import (
     QDockWidget,
@@ -14,19 +14,24 @@ from PySide6.QtWidgets import (
     QFrame,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QScrollArea,
     QSplitter,
     QStyle,
+    QTabWidget,
     QToolBar,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from ..controller import DocumentController
 from ..document import DocumentError, ImageElement, LabelDocument, TextElement
+from ..permissions import bluetooth_permission_status, request_bluetooth_permission
 from ..protocol import Config, LabelRoll, Status, build_job, describe_status
 from ..render import RenderError, RenderResult, render_document
+from ..runtime import ANDROID
 from ..settings import AppSettings
 from ..theme import repolish
 from ..worker import PrinterService
@@ -40,12 +45,24 @@ FILE_FILTER = "Label documents (*.label.json *.json);;All files (*)"
 PREVIEW_DEBOUNCE_MS = 120
 
 
+def _is_uri_path(path: str | Path) -> bool:
+    return str(path).startswith(("content:", "file:"))
+
+
+def _path_name(path: str | Path) -> str:
+    text = str(path)
+    if _is_uri_path(path):
+        name = QUrl(text).fileName()
+        return name or "label"
+    return Path(text).name
+
+
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.settings = AppSettings.load()
         self.controller = DocumentController(LabelDocument())
-        self._document_path: Path | None = None
+        self._document_path: str | Path | None = None
         self._connected = False
         self._printing = False
         self._last_result: RenderResult | None = None
@@ -61,9 +78,12 @@ class MainWindow(QMainWindow):
         self._service = PrinterService(self)
 
         self._build_actions()
-        self._build_ui()
+        if ANDROID:
+            self._build_mobile_ui()
+        else:
+            self._build_ui()
+            self._restore_window_state()
         self._connect_signals()
-        self._restore_window_state()
 
         self.controller.set_document(LabelDocument())
         self._sync_panel_from_settings()
@@ -253,7 +273,93 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.right_dock)
 
         self._build_menus()
+        self._build_status_bar()
 
+    def _build_mobile_ui(self) -> None:
+        """A touch-oriented shell for phones: canvas and panels in tabs."""
+
+        self.setWindowTitle("Thermling")
+        self.resize(420, 820)
+        self.setMinimumSize(300, 480)
+
+        self.canvas = CanvasView(self.controller, self)
+        self.inspector = Inspector(self.controller, self)
+        self.inspector.setMinimumWidth(0)
+        self.inspector_scroll = QScrollArea(self)
+        self.inspector_scroll.setWidgetResizable(True)
+        self.inspector_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.inspector_scroll.setWidget(self.inspector)
+        self.preview_panel = PreviewPanel(self)
+        self.printer_panel = PrinterPanel(self)
+
+        self._tabs = QTabWidget(self)
+        self._tabs.setDocumentMode(True)
+        self._tabs.setUsesScrollButtons(False)
+        self._tabs.tabBar().setExpanding(True)
+        self._tabs.addTab(self.canvas, "Label")
+        self._tabs.addTab(self.inspector_scroll, "Edit")
+        self._tabs.addTab(self.preview_panel, "Preview")
+        self._tabs.addTab(self.printer_panel, "Printer")
+        self.setCentralWidget(self._tabs)
+
+        mobile_toolbar = QToolBar("Main", self)
+        mobile_toolbar.setObjectName("MobileToolbar")
+        mobile_toolbar.setMovable(False)
+        mobile_toolbar.setIconSize(QSize(20, 20))
+        mobile_toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        for action in (
+            self.add_text_action,
+            self.add_image_action,
+            self.print_action,
+        ):
+            mobile_toolbar.addAction(action)
+
+        menu = QMenu(self)
+        for action in (
+            self.new_action,
+            self.open_action,
+            self.save_action,
+            self.save_as_action,
+        ):
+            menu.addAction(action)
+        menu.addSeparator()
+        for action in (
+            self.undo_action,
+            self.redo_action,
+            self.duplicate_action,
+            self.delete_action,
+        ):
+            menu.addAction(action)
+        menu.addSeparator()
+        menu.addAction(self.connect_action)
+        menu.addAction(self.refresh_action)
+        menu.addAction(self.self_test_action)
+        menu.addSeparator()
+        menu.addAction(self.zoom_in_action)
+        menu.addAction(self.zoom_out_action)
+        menu.addAction(self.fit_action)
+        menu.addAction(self.grid_action)
+        menu.addAction(self.snap_action)
+        menu.addAction(self.preferences_action)
+        menu.addAction(self.about_action)
+        menu.addAction(self.quit_action)
+
+        menu_button = QToolButton(self)
+        menu_button.setText("Menu")
+        menu_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        menu_button.setMenu(menu)
+        mobile_toolbar.addWidget(menu_button)
+        self.mobile_menu = menu
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, mobile_toolbar)
+
+        self.zoom_label = QLabel("100%", self)
+        self.zoom_label.hide()
+        self._build_status_bar()
+        self.document_status.hide()
+        self.size_status.hide()
+        self.statusBar().setSizeGripEnabled(False)
+
+    def _build_status_bar(self) -> None:
         self.connection_status = QLabel("Disconnected", self)
         self.connection_status.setProperty("role", "muted")
         self.document_status = QLabel("Untitled", self)
@@ -363,8 +469,9 @@ class MainWindow(QMainWindow):
     def _save_window_state(self) -> None:
         settings = QSettings()
         settings.setValue("window/geometry", self.saveGeometry())
-        settings.setValue("window/state", self.saveState())
-        settings.setValue("window/splitter", self._splitter.sizes())
+        if hasattr(self, "_splitter"):
+            settings.setValue("window/state", self.saveState())
+            settings.setValue("window/splitter", self._splitter.sizes())
 
     # --- document lifecycle ---------------------------------------------------
     def _new_document(self) -> None:
@@ -396,12 +503,14 @@ class MainWindow(QMainWindow):
         except DocumentError as error:
             QMessageBox.warning(self, "Could not open label", str(error))
             return
-        self._document_path = Path(path)
-        self.settings.last_dir = str(self._document_path.parent)
-        self.settings.save()
+        self._document_path = path if _is_uri_path(path) else Path(path)
+        if isinstance(self._document_path, Path):
+            self.settings.last_dir = str(self._document_path.parent)
+            self.settings.save()
         self.controller.set_document(document)
         self.canvas.fit_to_view()
-        self.statusBar().showMessage(f"Opened {self._document_path.name}", 4000)
+        self._show_mobile_tab(0)
+        self.statusBar().showMessage(f"Opened {_path_name(self._document_path)}", 4000)
 
     def _save_document(self) -> bool:
         self.inspector.commit_pending()
@@ -419,23 +528,30 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return False
-        target = Path(path)
-        if target.suffix.lower() not in {".json"}:
-            target = target.with_name(target.name + ".label.json")
+        if _is_uri_path(path):
+            target: str | Path = path
+        else:
+            local_target = Path(path)
+            if local_target.suffix.lower() not in {".json"}:
+                local_target = local_target.with_name(
+                    local_target.name + ".label.json"
+                )
+            target = local_target
         return self._write_document(target)
 
-    def _write_document(self, path: Path) -> bool:
+    def _write_document(self, path: str | Path) -> bool:
         try:
             self.controller.document.save(path)
         except (DocumentError, OSError) as error:
             QMessageBox.warning(self, "Could not save label", str(error))
             return False
         self._document_path = path
-        self.settings.last_dir = str(path.parent)
-        self.settings.save()
+        if isinstance(path, Path):
+            self.settings.last_dir = str(path.parent)
+            self.settings.save()
         self.controller.mark_saved()
         self._update_window_title()
-        self.statusBar().showMessage(f"Saved {path.name}", 4000)
+        self.statusBar().showMessage(f"Saved {_path_name(path)}", 4000)
         return True
 
     def _maybe_save(self) -> bool:
@@ -493,7 +609,7 @@ class MainWindow(QMainWindow):
         self._update_actions()
 
     def _update_window_title(self, *_: object) -> None:
-        name = self._document_path.name if self._document_path else "Untitled"
+        name = _path_name(self._document_path) if self._document_path else "Untitled"
         marker = " *" if self.controller.is_dirty else ""
         self.setWindowTitle(f"{name}{marker} — Thermling")
         self.document_status.setText(f"{name}{marker}")
@@ -519,7 +635,12 @@ class MainWindow(QMainWindow):
             return
         self.canvas.select_element(element_id)
         self.inspector.set_element(element)
+        self._show_mobile_tab(1)
         self.inspector.focus_text_editor()
+
+    def _show_mobile_tab(self, index: int) -> None:
+        if hasattr(self, "_tabs"):
+            self._tabs.setCurrentIndex(index)
 
     def _update_actions(self) -> None:
         has_selection = bool(self.canvas.selected_id())
@@ -546,6 +667,7 @@ class MainWindow(QMainWindow):
         self.controller.add_element(element, "Add text")
         self.canvas.select_element(element.id)
         self.inspector.set_element(element)
+        self._show_mobile_tab(1)
         self.inspector.focus_text_editor()
 
     def _add_image(self) -> None:
@@ -562,8 +684,9 @@ class MainWindow(QMainWindow):
         except ValueError as error:
             QMessageBox.warning(self, "Could not load image", str(error))
             return
-        self.settings.last_dir = str(Path(path).parent)
-        self.settings.save()
+        if not _is_uri_path(path):
+            self.settings.last_dir = str(Path(path).parent)
+            self.settings.save()
 
         document = self.controller.document
         page_width, page_height = document.page_size_mm(self.settings.head_width_mm)
@@ -577,7 +700,7 @@ class MainWindow(QMainWindow):
             width = height / aspect
         element = ImageElement(
             png_base64=png_base64,
-            source_name=Path(path).name,
+            source_name=_path_name(path),
             x_mm=(page_width - width) / 2.0,
             y_mm=(page_height - height) / 2.0,
             width_mm=max(0.5, width),
@@ -604,7 +727,7 @@ class MainWindow(QMainWindow):
         except ValueError as error:
             QMessageBox.warning(self, "Could not load image", str(error))
             return
-        name = Path(path).name
+        name = _path_name(path)
         self.controller.edit(
             lambda: _replace_image_data(element, png_base64, name), "Replace image"
         )
@@ -753,6 +876,14 @@ class MainWindow(QMainWindow):
     def _connect_printer(self, mac: str, backend: str, device: str) -> None:
         if self._connected:
             return
+        if ANDROID and bluetooth_permission_status() != Qt.PermissionStatus.Granted:
+            request_bluetooth_permission(
+                self,
+                lambda granted: self._after_bluetooth_permission(
+                    granted, mac, backend, device
+                ),
+            )
+            return
         self.settings.mac = mac.upper()
         self.settings.backend = backend
         self.settings.device = device
@@ -760,6 +891,19 @@ class MainWindow(QMainWindow):
         self.printer_panel.set_connecting()
         self._status_message(f"Connecting to {mac}…")
         self._service.connect_to(mac, backend, device, self.settings.take_over)
+
+    def _after_bluetooth_permission(
+        self, granted: bool, mac: str, backend: str, device: str
+    ) -> None:
+        if granted:
+            self._connect_printer(mac, backend, device)
+            return
+        QMessageBox.warning(
+            self,
+            "Bluetooth permission required",
+            "Thermling needs Bluetooth access to talk to the printer. "
+            "Grant “Nearby devices” permission in Android settings, then try again.",
+        )
 
     def _disconnect_printer(self) -> None:
         if not self._connected:
@@ -899,11 +1043,22 @@ class MainWindow(QMainWindow):
 
 # --- helpers ------------------------------------------------------------------
 def _image_to_png_base64(path: str) -> tuple[str, int, int]:
-    reader = QImageReader(path)
-    reader.setAutoTransform(True)
-    image = reader.read()
-    if image.isNull():
-        raise ValueError(reader.errorString() or "Unsupported image format")
+    source: QFile | None = None
+    if path.startswith("content:"):
+        source = QFile(path)
+        if not source.open(QIODevice.OpenModeFlag.ReadOnly):
+            raise ValueError(source.errorString() or "Could not open the image")
+    elif path.startswith("file:"):
+        path = QUrl(path).toLocalFile()
+    try:
+        reader = QImageReader(source) if source is not None else QImageReader(path)
+        reader.setAutoTransform(True)
+        image = reader.read()
+        if image.isNull():
+            raise ValueError(reader.errorString() or "Unsupported image format")
+    finally:
+        if source is not None:
+            source.close()
     if max(image.width(), image.height()) > 1400:
         image = image.scaled(
             1400,

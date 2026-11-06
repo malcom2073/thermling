@@ -1,9 +1,9 @@
 # Thermling
 
-Thermling is a Linux label app for Nelko P21/P22 thermal label printers,
-written in Python with PySide6. Lay out text and images on a label in
-millimetres, see a faithful 1-bit preview of what the print head will produce,
-and send it over Bluetooth.
+Thermling is a label app for Nelko P21/P22 thermal label printers, written in
+Python with PySide6. Lay out text and images on a label in millimetres, see a
+faithful 1-bit preview of what the print head will produce, and send it over
+Bluetooth. It runs on Linux and has an Android MVP build.
 
 This is an independent tool built from the protocol documentation and example
 script in
@@ -35,11 +35,15 @@ not affiliated with Nelko.
 - Save/load label documents as portable JSON (images are embedded)
 - Undo/redo, snapping, zoom, grid
 - Follows the desktop light/dark theme; the label itself always stays white
-- Two transports:
+- Desktop transports:
   - **Direct RFCOMM socket** (default) — the app opens Bluetooth channel 1
     itself. No root access or `/dev/rfcomm0` needed.
   - **`/dev/rfcomm0` serial** — opens an existing tty or asks `rfcomm` to
     connect one.
+- Android MVP:
+  - Touch-oriented tabbed layout for the label, inspector, preview and printer
+  - Bluetooth RFCOMM/SPP through QtBluetooth, with runtime permission handling
+  - Android system file picker support (`content://` URIs) for labels and images
 
 ## Requirements
 
@@ -50,6 +54,9 @@ not affiliated with Nelko.
   system Python on Debian/Ubuntu and many distro builds have it; some
   pyenv/standalone builds do not. `uv venv --python /usr/bin/python3.12` is a
   reliable way to pick the system interpreter.
+
+Android builds need a Unix host (Linux or macOS), JDK 17, the Android SDK/NDK,
+and the matching PySide6 and Shiboken Android wheels.
 
 ## Setup
 
@@ -66,6 +73,63 @@ uv run thermling
 # or
 uv run python -m thermling
 ```
+
+## Android MVP
+
+The Android build keeps the same document, rendering and protocol code. It
+adds a tabbed phone layout and uses QtBluetooth rather than Python's Bluetooth
+socket module, which Android does not provide. Pair the printer in Android's
+**Settings → Bluetooth** first; inside Thermling, tap **Scan**, choose it, and
+grant the **Nearby devices** permission when prompted.
+
+Build prerequisites:
+
+- A Unix host (Linux or macOS) with JDK 17 (`python-for-android` accepts this major version)
+- Android SDK, build-tools, platform tools and NDK for your Qt version
+- PySide6 and Shiboken **Android** wheels for `aarch64` (debug APK target)
+
+Install the deployment dependencies and fetch matching Android wheels:
+
+```bash
+uv sync --group android
+
+# Alternatively download both wheels from the Qt for Python downloads page.
+uv tool install qtpip
+qtpip download PySide6 --android --arch aarch64
+qtpip download shiboken6 --android --arch aarch64
+```
+
+The easiest way to get the Android NDK/SDK is Qt's download script:
+
+```bash
+git clone https://code.qt.io/pyside/pyside-setup
+cd pyside-setup
+python3 tools/cross_compile_android/main.py --download-only --skip-update --auto-accept-license
+```
+
+Then build from this repository (paths vary by wheel version):
+
+```bash
+uv run pyside6-android-deploy \
+  --config-file pysidedeploy.spec \
+  --wheel-pyside ~/Downloads/pyside6-6.12.0-6.12.0-cp310-abi3-android_aarch64.whl \
+  --wheel-shiboken ~/Downloads/shiboken6-6.12.0-6.12.0-cp310-abi3-android_aarch64.whl
+```
+
+`pysidedeploy.spec` produces a debug APK in `dist/`. Install it with
+`adb install`, then test Bluetooth on a physical device; emulators cannot use
+Bluetooth. The Qt Bluetooth Android dependency automatically contributes the
+`BLUETOOTH_CONNECT`, `BLUETOOTH_SCAN`, and legacy location permissions to the
+generated manifest. Thermling requests runtime access at startup, before
+scanning, and again before connecting.
+
+The Android MVP has these known limits:
+
+- A printer already connected by another Android app must be disconnected there
+  first; Android does not let Thermling take over another app's SPP link.
+- If Android's permission prompt is permanently denied, grant **Nearby devices**
+  in the system app settings and restart Thermling.
+- The first APK is large because it bundles Qt and Python; this is expected.
 
 ## Bluetooth notes
 
@@ -120,9 +184,13 @@ src/thermling/
   document.py      JSON document model (text/image elements, label settings)
   render.py        millimetre document -> 1-bpp printer bitmap
   theme.py         light/dark palettes and application stylesheet
-  transport.py     RFCOMM socket / serial transports and device discovery
+  runtime.py       desktop/Android runtime detection
+  permissions.py   Android Bluetooth runtime permission requests
+  transport.py     RFCOMM socket, serial and QtBluetooth transports
   worker.py        printer I/O worker running on a QThread
   settings.py      persistent application preferences
   ui/              main window, canvas, inspector, preview, printer panel
+main.py            entry point used by pyside6-android-deploy
+pysidedeploy.spec  Android debug build configuration
 tests/             protocol, rendering, document and UI tests
 ```
