@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..permissions import bluetooth_permission_status, request_bluetooth_permission
+from ..permissions import permission_status, request_android_permissions
 from ..protocol import Battery, Config, LabelRoll, Status, describe_status
 from ..runtime import ANDROID
 from ..theme import repolish
@@ -325,13 +325,10 @@ class PrinterPanel(QWidget):
 
     def _scan_devices(self, checked: bool = False) -> None:
         del checked  # QPushButton.clicked passes a bool
-        if (
-            ANDROID
-            and bluetooth_permission_status() != Qt.PermissionStatus.Granted
-        ):
+        if ANDROID and permission_status() != Qt.PermissionStatus.Granted:
             self.error_label.hide()
             self.scan_button.setEnabled(False)
-            request_bluetooth_permission(self, self._scan_after_permission)
+            request_android_permissions(self, self._scan_after_permission)
             return
         self._run_scan()
 
@@ -339,8 +336,8 @@ class PrinterPanel(QWidget):
         if not granted:
             self.scan_button.setEnabled(not self._connected)
             self.error_label.setText(
-                "Bluetooth permission was denied. Grant “Nearby devices” access "
-                "to Thermling in Android settings and try again."
+                "Bluetooth or location permission was denied. Grant “Nearby devices” "
+                "and “Location” access to Thermling in Android settings and try again."
             )
             self.error_label.show()
             return

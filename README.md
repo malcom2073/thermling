@@ -80,7 +80,7 @@ The Android build keeps the same document, rendering and protocol code. It
 adds a tabbed phone layout and uses QtBluetooth rather than Python's Bluetooth
 socket module, which Android does not provide. Pair the printer in Android's
 **Settings → Bluetooth** first; inside Thermling, tap **Scan**, choose it, and
-grant the **Nearby devices** permission when prompted.
+grant the **Nearby devices** and **Location** permissions when prompted.
 
 Build prerequisites:
 
@@ -141,15 +141,17 @@ uv run pyside6-android-deploy \
 `adb install`, then test Bluetooth on a physical device; emulators cannot use
 Bluetooth. The Qt Bluetooth Android dependency automatically contributes the
 `BLUETOOTH_CONNECT`, `BLUETOOTH_SCAN`, and legacy location permissions to the
-generated manifest. Thermling requests runtime access at startup, before
-scanning, and again before connecting.
+generated manifest. Thermling requests both **Nearby devices** and precise
+**Location** access at startup, before scanning, and again before connecting.
+Location access is required by Android's Bluetooth scan API because the
+manifest does not assert `neverForLocation`.
 
 The Android MVP has these known limits:
 
 - A printer already connected by another Android app must be disconnected there
   first; Android does not let Thermling take over another app's SPP link.
 - If Android's permission prompt is permanently denied, grant **Nearby devices**
-  in the system app settings and restart Thermling.
+  and **Location** in the system app settings and restart Thermling.
 - The first APK is large because it bundles Qt and Python; this is expected.
 
 ## Bluetooth notes

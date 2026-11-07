@@ -7,6 +7,7 @@ from collections.abc import Callable
 from PySide6.QtCore import (
     QBluetoothPermission,
     QCoreApplication,
+    QLocationPermission,
     QObject,
     QPermission,
     Qt,
@@ -23,8 +24,14 @@ def _bluetooth_permission() -> QBluetoothPermission:
     return permission
 
 
+def _location_permission() -> QLocationPermission:
+    permission = QLocationPermission()
+    permission.setAccuracy(QLocationPermission.Accuracy.Precise)
+    return permission
+
+
 def bluetooth_permission_status() -> Qt.PermissionStatus:
-    """Return the current status, or ``Granted`` off Android."""
+    """Return the current Bluetooth permission status."""
 
     if not ANDROID:
         return Qt.PermissionStatus.Granted
@@ -34,19 +41,37 @@ def bluetooth_permission_status() -> Qt.PermissionStatus:
     return app.checkPermission(_bluetooth_permission())
 
 
-def request_bluetooth_permission(
-    context: QObject, callback: Callable[[bool], None]
-) -> None:
-    """Request Android Bluetooth access and report the result asynchronously."""
+def location_permission_status() -> Qt.PermissionStatus:
+    """Return the current precise-location permission status."""
 
     if not ANDROID:
-        callback(True)
-        return
+        return Qt.PermissionStatus.Granted
     app = QCoreApplication.instance()
     if app is None:
-        callback(False)
-        return
-    permission = _bluetooth_permission()
+        return Qt.PermissionStatus.Undetermined
+    return app.checkPermission(_location_permission())
+
+
+def permission_status() -> Qt.PermissionStatus:
+    """Return the combined status of the permissions Bluetooth scanning needs."""
+
+    statuses = (
+        bluetooth_permission_status(),
+        location_permission_status(),
+    )
+    if all(status == Qt.PermissionStatus.Granted for status in statuses):
+        return Qt.PermissionStatus.Granted
+    if any(status == Qt.PermissionStatus.Denied for status in statuses):
+        return Qt.PermissionStatus.Denied
+    return Qt.PermissionStatus.Undetermined
+
+
+def _request_permission(
+    app: QCoreApplication,
+    permission: QPermission,
+    context: QObject,
+    callback: Callable[[bool], None],
+) -> None:
     status = app.checkPermission(permission)
     if status == Qt.PermissionStatus.Granted:
         callback(True)
@@ -59,3 +84,30 @@ def request_bluetooth_permission(
         callback(result.status() == Qt.PermissionStatus.Granted)
 
     app.requestPermission(permission, context, finished)
+
+
+def request_android_permissions(
+    context: QObject, callback: Callable[[bool], None]
+) -> None:
+    """Request Bluetooth and location access, reporting whether both were granted.
+
+    Android 12+ shows separate prompts for "Nearby devices" and "Location".
+    QtBluetooth needs precise location as well when the manifest does not
+    declare ``BLUETOOTH_SCAN`` with ``neverForLocation``.
+    """
+
+    if not ANDROID:
+        callback(True)
+        return
+    app = QCoreApplication.instance()
+    if app is None:
+        callback(False)
+        return
+
+    def after_bluetooth(granted: bool) -> None:
+        if not granted:
+            callback(False)
+            return
+        _request_permission(app, _location_permission(), context, callback)
+
+    _request_permission(app, _bluetooth_permission(), context, after_bluetooth)

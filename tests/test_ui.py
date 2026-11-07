@@ -606,7 +606,7 @@ def test_android_mobile_shell(qtbot, monkeypatch):
 def test_android_scan_requests_permission_when_denied(qtbot, monkeypatch):
     monkeypatch.setattr("thermling.ui.printer_panel.ANDROID", True)
     monkeypatch.setattr(
-        "thermling.ui.printer_panel.bluetooth_permission_status",
+        "thermling.ui.printer_panel.permission_status",
         lambda: Qt.PermissionStatus.Undetermined,
     )
     requested: list = []
@@ -616,7 +616,7 @@ def test_android_scan_requests_permission_when_denied(qtbot, monkeypatch):
         callback(False)
 
     monkeypatch.setattr(
-        "thermling.ui.printer_panel.request_bluetooth_permission", request
+        "thermling.ui.printer_panel.request_android_permissions", request
     )
     panel = PrinterPanel()
     qtbot.addWidget(panel)
@@ -631,7 +631,7 @@ def test_android_scan_requests_permission_when_denied(qtbot, monkeypatch):
 def test_android_scan_runs_after_permission_granted(qtbot, monkeypatch):
     monkeypatch.setattr("thermling.ui.printer_panel.ANDROID", True)
     monkeypatch.setattr(
-        "thermling.ui.printer_panel.bluetooth_permission_status",
+        "thermling.ui.printer_panel.permission_status",
         lambda: Qt.PermissionStatus.Undetermined,
     )
     device = Device("E4:53:A2:5F:F1:E7", "P21")
@@ -643,7 +643,7 @@ def test_android_scan_runs_after_permission_granted(qtbot, monkeypatch):
         callback(True)
 
     monkeypatch.setattr(
-        "thermling.ui.printer_panel.request_bluetooth_permission", request
+        "thermling.ui.printer_panel.request_android_permissions", request
     )
     panel = PrinterPanel()
     qtbot.addWidget(panel)
@@ -658,7 +658,7 @@ def test_android_scan_runs_after_permission_granted(qtbot, monkeypatch):
 def test_connect_requests_android_permission(window: MainWindow, monkeypatch):
     monkeypatch.setattr("thermling.ui.main_window.ANDROID", True)
     monkeypatch.setattr(
-        "thermling.ui.main_window.bluetooth_permission_status",
+        "thermling.ui.main_window.permission_status",
         lambda: Qt.PermissionStatus.Undetermined,
     )
     requested: list = []
@@ -668,7 +668,7 @@ def test_connect_requests_android_permission(window: MainWindow, monkeypatch):
         callback(False)
 
     monkeypatch.setattr(
-        "thermling.ui.main_window.request_bluetooth_permission", request
+        "thermling.ui.main_window.request_android_permissions", request
     )
     monkeypatch.setattr(
         "thermling.ui.main_window.QMessageBox.warning", lambda *args, **kwargs: None

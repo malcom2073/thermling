@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 
 from ..controller import DocumentController
 from ..document import DocumentError, ImageElement, LabelDocument, TextElement
-from ..permissions import bluetooth_permission_status, request_bluetooth_permission
+from ..permissions import permission_status, request_android_permissions
 from ..protocol import Config, LabelRoll, Status, build_job, describe_status
 from ..render import RenderError, RenderResult, render_document
 from ..runtime import ANDROID
@@ -876,8 +876,8 @@ class MainWindow(QMainWindow):
     def _connect_printer(self, mac: str, backend: str, device: str) -> None:
         if self._connected:
             return
-        if ANDROID and bluetooth_permission_status() != Qt.PermissionStatus.Granted:
-            request_bluetooth_permission(
+        if ANDROID and permission_status() != Qt.PermissionStatus.Granted:
+            request_android_permissions(
                 self,
                 lambda granted: self._after_bluetooth_permission(
                     granted, mac, backend, device
@@ -900,9 +900,10 @@ class MainWindow(QMainWindow):
             return
         QMessageBox.warning(
             self,
-            "Bluetooth permission required",
-            "Thermling needs Bluetooth access to talk to the printer. "
-            "Grant “Nearby devices” permission in Android settings, then try again.",
+            "Bluetooth permissions required",
+            "Thermling needs Bluetooth and location access to find and talk to the "
+            "printer. Grant “Nearby devices” and “Location” permission in Android "
+            "settings, then try again.",
         )
 
     def _disconnect_printer(self) -> None:
