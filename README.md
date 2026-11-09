@@ -6,9 +6,17 @@ Linux desktop app and as an Android app.
 
 ## Screenshots
 
-| Linux desktop app | Printed label |
+### Linux desktop
+
+| Desktop app | Printed label |
 |:---:|:---:|
 | ![Thermling desktop app running on Linux](MainApp.png) | ![Label printed on a Nelko P21](label.jpeg) |
+
+### Android
+
+| Android app | Android app |
+|:---:|:---:|
+| ![Thermling Android app screenshot](Screenshot_20261108-220309.png) | ![Thermling Android app screenshot](Screenshot_20261108-220322.png) |
 
 ## What works in this MVP
 
