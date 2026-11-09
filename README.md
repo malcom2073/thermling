@@ -98,7 +98,7 @@ Then build and install the debug APK:
 ```bash
 export ANDROID_HOME=/path/to/android-sdk
 JAVA_HOME=/path/to/jdk-17 ./gradlew assembleDebug
-adb install -r build/outputs/apk/debug/thermling2-debug.apk
+adb install -r build/outputs/apk/debug/thermling-debug.apk
 ```
 
 On first launch Thermling asks for **Nearby devices** permission on Android 12+
