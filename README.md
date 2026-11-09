@@ -2,9 +2,13 @@
 
 Thermling is a label composer for the Nelko P21/P22 thermal printer, built with
 Compose Multiplatform. The shared Kotlin model, protocol, state, and UI run as a
-Linux desktop MVP and as an Android MVP. The PySide6 application remains the
-production implementation and is kept separate so it stays untouched while the
-Kotlin rewrite is validated.
+Linux desktop app and as an Android app.
+
+## Screenshots
+
+| Linux desktop app | Printed label |
+|:---:|:---:|
+| ![Thermling desktop app running on Linux](MainApp.png) | ![Label printed on a Nelko P21](label.jpeg) |
 
 ## What works in this MVP
 
