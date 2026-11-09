@@ -96,12 +96,7 @@ internal interface RfcommSocket : AutoCloseable {
     fun write(payload: ByteArray)
 }
 
-internal fun parseBluetoothAddress(value: String): ByteArray {
-    val normalized = RfcommProcessTransport.normalizeMac(value)
-    val bytes = normalized.split(':').map { it.toInt(16).toByte() }
-    // bdaddr_t stores the least-significant byte first, unlike the printed form.
-    return ByteArray(bytes.size) { index -> bytes[bytes.size - 1 - index] }
-}
+internal fun parseBluetoothAddress(value: String): ByteArray = bluetoothAddressBytes(value)
 
 /**
  * Thin libc binding. The socket is created non-blocking so connect, reads and

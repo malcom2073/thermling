@@ -14,6 +14,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -31,6 +32,7 @@ import com.thermling.model.TextElement
 import com.thermling.model.VerticalAlign
 import com.thermling.protocol.Style
 import com.thermling.protocol.formatNumber
+import kotlinx.coroutines.launch
 
 @Composable
 fun InspectorPanel(state: ThermlingState, modifier: Modifier = Modifier) {
@@ -363,6 +365,7 @@ private fun TextElementFields(state: ThermlingState, element: TextElement) {
 @Composable
 private fun ImageElementFields(state: ThermlingState, element: ImageElement) {
     val palette = LocalThermlingPalette.current
+    val scope = rememberCoroutineScope()
     val id = element.id
     Text(
         element.sourceName.ifBlank { "Embedded image" },
@@ -384,10 +387,13 @@ private fun ImageElementFields(state: ThermlingState, element: ImageElement) {
     )
     OutlinedButton(
         onClick = {
-            runCatching { state.platform.chooseImage() }.onSuccess { image ->
-                if (image != null) state.replaceImage(id, image)
-            }.onFailure {
-                state.statusMessage = "Could not load image: ${it.message}"
+            scope.launch {
+                try {
+                    val image = state.platform.chooseImage()
+                    if (image != null) state.replaceImage(id, image)
+                } catch (error: Exception) {
+                    state.statusMessage = "Could not load image: ${error.message}"
+                }
             }
         },
         modifier = Modifier.fillMaxWidth(),

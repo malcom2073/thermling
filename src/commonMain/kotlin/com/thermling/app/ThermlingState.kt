@@ -567,6 +567,5 @@ class ThermlingState(val platform: Platform) {
 
     fun printerStatusText(): String = describeStatus(printerStatus)
 
-    private fun fileName(path: String): String =
-        path.substringAfterLast('/').substringAfterLast('\\').ifBlank { path }
+    private fun fileName(path: String): String = platform.displayName(path)
 }

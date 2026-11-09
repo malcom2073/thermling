@@ -1,13 +1,11 @@
 package com.thermling.render
 
-import com.thermling.model.Halftone
 import com.thermling.model.ImageElement
 import com.thermling.model.ImageFit
 import com.thermling.model.LabelDocument
 import com.thermling.model.Orientation
 import com.thermling.model.TextElement
 import com.thermling.model.VerticalAlign
-import com.thermling.protocol.DEFAULT_DPI
 import com.thermling.protocol.bitmapWidthDots
 import com.thermling.protocol.mmToDots
 import com.thermling.protocol.printableWidthMm
@@ -21,12 +19,9 @@ import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import java.util.Base64
 import javax.imageio.ImageIO
-import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
-
-class RenderError(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 class AwtLabelRenderer : LabelRenderer {
     override fun render(document: LabelDocument, dpi: Int, headWidthMm: Double): RenderResult {
@@ -68,13 +63,43 @@ class AwtLabelRenderer : LabelRenderer {
         }
 
         val halftone = effectiveHalftone(document)
-        val printerCanvas = if (landscape) rotate(canvas, -90.0) else canvas
-        val (packed, mono) = binarize(printerCanvas, halftone, document.thermalCorrection)
-        val preview = if (landscape) rotate(mono, 90.0) else mono
+        val page = canvas.getRGB(0, 0, pageWidthDots, pageHeightDots, null, 0, pageWidthDots)
+        val printerPixels = if (landscape) {
+            rotateQuarterTurns(page, pageWidthDots, pageHeightDots, 3)
+        } else {
+            RasterPixels(pageWidthDots, pageHeightDots, page)
+        }
+        val packed = binarizeRgb(
+            printerPixels.pixels,
+            printerPixels.width,
+            printerPixels.height,
+            halftone,
+            document.thermalCorrection,
+        )
+        val previewPixels = if (landscape) {
+            rotateQuarterTurns(packed.toArgb(), packed.width, packed.height, 1)
+        } else {
+            RasterPixels(packed.width, packed.height, packed.toArgb())
+        }
+        val preview = BufferedImage(
+            previewPixels.width,
+            previewPixels.height,
+            BufferedImage.TYPE_INT_RGB,
+        ).apply {
+            setRGB(
+                0,
+                0,
+                previewPixels.width,
+                previewPixels.height,
+                previewPixels.pixels,
+                0,
+                previewPixels.width,
+            )
+        }
         return RenderResult(
             widthDots = widthDots,
             heightDots = heightDots,
-            data = packed,
+            data = packed.data,
             preview = preview.toComposeImageBitmap(),
             dpi = dpi,
             printableWidthMm = printable,
@@ -248,141 +273,4 @@ class AwtLabelRenderer : LabelRenderer {
         return target to sourceRect
     }
 
-    /**
-     * Exact quarter-turn rotation for the only angles used by the renderer
-     * (±90°). A general affine rotation shifts even-sized images by half a
-     * pixel and can introduce a white edge on the print bitmap; this loop
-     * matches Qt's FastTransformation pixel mapping instead.
-     */
-    private fun rotate(source: BufferedImage, degrees: Double): BufferedImage {
-        val quarterTurns = (((degrees / 90.0).roundToInt() % 4) + 4) % 4
-        if (quarterTurns == 0) return source
-
-        val quarterTurn = quarterTurns % 2 == 1
-        val width = if (quarterTurn) source.height else source.width
-        val height = if (quarterTurn) source.width else source.height
-        val target = BufferedImage(width, height, source.type)
-        val sourceRaster = source.raster
-        val targetRaster = target.raster
-        val gray = sourceRaster.numBands == 1
-
-        for (y in 0 until height) {
-            for (x in 0 until width) {
-                val sourceX = when (quarterTurns) {
-                    1 -> y
-                    2 -> source.width - 1 - x
-                    else -> source.width - 1 - y
-                }
-                val sourceY = when (quarterTurns) {
-                    1 -> source.height - 1 - x
-                    2 -> source.height - 1 - y
-                    else -> x
-                }
-                if (gray) {
-                    targetRaster.setSample(x, y, 0, sourceRaster.getSample(sourceX, sourceY, 0))
-                } else {
-                    target.setRGB(x, y, source.getRGB(sourceX, sourceY))
-                }
-            }
-        }
-        return target
-    }
-
-    private fun effectiveHalftone(document: LabelDocument): Halftone =
-        if (document.halftone == Halftone.AUTO) {
-            if (document.hasImages()) Halftone.FLOYD else Halftone.THRESHOLD
-        } else {
-            document.halftone
-        }
-
-    private fun binarize(
-        gray: BufferedImage,
-        mode: Halftone,
-        thermalCorrection: Boolean,
-    ): Pair<ByteArray, BufferedImage> {
-        val width = gray.width
-        val height = gray.height
-        if (width % 8 != 0) throw RenderError("Bitmap width must be a multiple of 8 dots")
-        val rowBytes = width / 8
-        val pixels = IntArray(width * height)
-        val rgb = gray.getRGB(0, 0, width, height, null, 0, width)
-        for (index in rgb.indices) {
-            val value = rgb[index]
-            pixels[index] = ((value ushr 16 and 0xFF) * 77 + (value ushr 8 and 0xFF) * 150 + (value and 0xFF) * 29) ushr 8
-        }
-
-        if (thermalCorrection) {
-            val lut = thermalLut()
-            for (index in pixels.indices) pixels[index] = lut[pixels[index]]
-        }
-
-        if (mode == Halftone.THRESHOLD) {
-            for (index in pixels.indices) {
-                pixels[index] = if (pixels[index] >= THRESHOLD) 255 else 0
-            }
-        } else {
-            floydSteinberg(pixels, width, height)
-        }
-
-        val packed = ByteArray(rowBytes * height)
-        for (y in 0 until height) {
-            val offset = y * rowBytes
-            for (x in 0 until width) {
-                if (pixels[y * width + x] != 0) {
-                    packed[offset + (x shr 3)] =
-                        (packed[offset + (x shr 3)].toInt() or (1 shl (7 - (x and 7)))).toByte()
-                }
-            }
-        }
-
-        val mono = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
-        for (y in 0 until height) {
-            for (x in 0 until width) {
-                val set = packed[y * rowBytes + (x shr 3)].toInt() and (1 shl (7 - (x and 7))) != 0
-                mono.setRGB(x, y, if (set) 0xFFFFFFFF.toInt() else 0xFF000000.toInt())
-            }
-        }
-        return packed to mono
-    }
-
-    private fun floydSteinberg(pixels: IntArray, width: Int, height: Int) {
-        for (y in 0 until height) {
-            val rowOffset = y * width
-            val nextOffset = (y + 1) * width
-            for (x in 0 until width) {
-                val old = pixels[rowOffset + x]
-                val new = if (old >= THRESHOLD) 255 else 0
-                pixels[rowOffset + x] = new
-                val error = old - new
-                if (error == 0) continue
-                if (x + 1 < width) {
-                    pixels[rowOffset + x + 1] = clamp(pixels[rowOffset + x + 1] + Math.floorDiv(error * 7, 16))
-                }
-                if (y + 1 < height) {
-                    if (x > 0) {
-                        pixels[nextOffset + x - 1] = clamp(pixels[nextOffset + x - 1] + Math.floorDiv(error * 3, 16))
-                    }
-                    pixels[nextOffset + x] = clamp(pixels[nextOffset + x] + Math.floorDiv(error * 5, 16))
-                    if (x + 1 < width) {
-                        pixels[nextOffset + x + 1] = clamp(pixels[nextOffset + x + 1] + Math.floorDiv(error, 16))
-                    }
-                }
-            }
-        }
-    }
-
-    private fun clamp(value: Int): Int = value.coerceIn(0, 255)
-
-    private fun thermalLut(): IntArray = IntArray(256) { value ->
-        val corrected = if (value <= 16) {
-            value * 5.0625
-        } else {
-            81.0 + (value - 16) * 0.728
-        }
-        corrected.toInt().coerceIn(0, 255)
-    }
-
-    companion object {
-        private const val THRESHOLD = 128
-    }
 }

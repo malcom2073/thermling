@@ -80,16 +80,13 @@ fun PrinterDialog(
                     DropdownField(
                         label = "Backend",
                         value = state.settings.transport,
-                        options = TransportKind.entries,
-                        labelOf = { it.label },
+                        options = state.platform.transportOptions,
+                        labelOf = state.platform::transportLabel,
                         onSelect = { kind ->
                             state.updateSettings { it.copy(transport = kind) }
                         },
                     )
-                    if (
-                        state.settings.transport == TransportKind.SOCKET ||
-                        state.settings.transport == TransportKind.RFCOMM
-                    ) {
+                    if (state.platform.transportSupportsScanning(state.settings.transport)) {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -165,10 +162,7 @@ fun PrinterDialog(
                             label = "Printer Bluetooth address",
                         )
                     }
-                    if (
-                        state.settings.transport == TransportKind.RFCOMM ||
-                        state.settings.transport == TransportKind.SERIAL
-                    ) {
+                    if (state.platform.transportUsesSerialDevice(state.settings.transport)) {
                         TextFieldCompact(
                             value = state.settings.device,
                             onValueChange = { value ->
@@ -179,17 +173,7 @@ fun PrinterDialog(
                     }
                     if (state.settings.transport != TransportKind.DEMO) {
                         Text(
-                            when (state.settings.transport) {
-                                TransportKind.SOCKET ->
-                                    "Uses a direct Bluetooth socket. No root or /dev/rfcomm " +
-                                        "device is needed; pair the printer with BlueZ first."
-                                TransportKind.RFCOMM ->
-                                    "Thermling starts `rfcomm connect` for this address, then " +
-                                        "opens the serial device. Pair the printer with BlueZ first."
-                                TransportKind.SERIAL ->
-                                    "Use an existing /dev/rfcommN device created outside Thermling."
-                                TransportKind.DEMO -> ""
-                            },
+                            state.platform.transportDescription(state.settings.transport),
                             color = palette.muted,
                             fontSize = 10.sp,
                         )
@@ -276,7 +260,7 @@ fun PrinterDialog(
                 }
 
                 Text(
-                    "On Linux, pair the P21 first (for example with `bluetoothctl`) and make sure your user can access the serial device. The 12 mm print head clips wider labels.",
+                    state.platform.connectionHint,
                     color = palette.muted,
                     fontSize = 10.sp,
                 )

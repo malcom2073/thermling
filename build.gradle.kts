@@ -8,6 +8,7 @@ plugins {
     kotlin("plugin.serialization") version "2.1.21"
     id("org.jetbrains.compose") version "1.8.2"
     id("org.jetbrains.kotlin.plugin.compose") version "2.1.21"
+    id("com.android.application") version "8.7.3"
 }
 
 group = "com.thermling"
@@ -15,6 +16,11 @@ version = "0.1.0"
 
 kotlin {
     jvm("desktop") {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
+        }
+    }
+    androidTarget {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
         }
@@ -49,6 +55,38 @@ kotlin {
                 implementation(compose.desktop.currentOs)
             }
         }
+        val androidMain by getting {
+            dependencies {
+                implementation("androidx.activity:activity-compose:1.10.1")
+                implementation("androidx.core:core-ktx:1.15.0")
+            }
+        }
+    }
+}
+
+android {
+    namespace = "com.thermling.android"
+    compileSdk = 35
+    buildToolsVersion = "37.0.0"
+
+    defaultConfig {
+        applicationId = "com.thermling"
+        minSdk = 26
+        targetSdk = 35
+        versionCode = 1
+        versionName = project.version.toString()
+    }
+
+    sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
+    sourceSets["main"].res.srcDirs("src/androidMain/res")
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    packaging {
+        resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}")
     }
 }
 

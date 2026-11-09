@@ -100,14 +100,6 @@ class RfcommProcessTransport(
     }
 
     companion object {
-        private val MAC_PATTERN = Regex("([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}")
-
-        fun normalizeMac(value: String): String {
-            val trimmed = value.trim().uppercase().replace('-', ':')
-            if (!MAC_PATTERN.matches(trimmed)) {
-                throw TransportException("Invalid Bluetooth address: $value")
-            }
-            return trimmed
-        }
+        fun normalizeMac(value: String): String = normalizeBluetoothAddress(value)
     }
 }

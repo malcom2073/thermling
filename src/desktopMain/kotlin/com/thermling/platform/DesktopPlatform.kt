@@ -42,7 +42,7 @@ class DesktopPlatform : Platform {
         }.getOrNull()
     }
 
-    override fun chooseImage(): PickedImage? {
+    override suspend fun chooseImage(): PickedImage? {
         val path = chooseFile("Choose image", FileDialog.LOAD, imageFilter) ?: return null
         val file = File(path)
         val source = ImageIO.read(file) ?: throw IllegalArgumentException("Unsupported image format")
@@ -72,10 +72,10 @@ class DesktopPlatform : Platform {
         )
     }
 
-    override fun openDocumentDialog(): String? =
+    override suspend fun openDocumentDialog(): String? =
         chooseFile("Open label document", FileDialog.LOAD, documentFilter)
 
-    override fun saveDocumentDialog(suggestedName: String): String? {
+    override suspend fun saveDocumentDialog(suggestedName: String): String? {
         val suggested = if (suggestedName.endsWith(".json", ignoreCase = true)) {
             suggestedName
         } else {

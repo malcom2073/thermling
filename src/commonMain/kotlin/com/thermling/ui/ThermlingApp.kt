@@ -3,12 +3,14 @@ package com.thermling.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +18,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,7 +28,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -37,7 +41,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -47,11 +50,17 @@ import androidx.compose.ui.unit.sp
 import com.thermling.app.ConnectionState
 import com.thermling.app.ThermlingState
 import com.thermling.model.ImageElement
-import com.thermling.model.LabelDocument
 import com.thermling.model.LABEL_PRESETS
 import com.thermling.model.TextElement
 import kotlinx.coroutines.launch
 import kotlin.math.max
+
+private enum class CompactTab(val label: String) {
+    DESIGN("Design"),
+    LABEL("Label"),
+    ELEMENT("Element"),
+    PREVIEW("Preview");
+}
 
 @Composable
 fun ThermlingApp(state: ThermlingState) {
@@ -63,62 +72,35 @@ fun ThermlingApp(state: ThermlingState) {
         state.renderPreview()
     }
 
-    Surface(color = palette.window, modifier = Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize()) {
-            TopBar(
-                state = state,
-                onNew = { state.newDocument() },
-                onOpen = { scope.launch { state.openDocument() } },
-                onSave = { scope.launch { state.saveDocument() } },
-                onSaveAs = { scope.launch { state.saveDocumentAs() } },
-                onAddText = { state.addText() },
-                onAddImage = {
-                    runCatching { state.platform.chooseImage() }.onSuccess { image ->
-                        if (image != null) state.addImage(image)
-                    }.onFailure {
-                        state.statusMessage = "Could not load image: ${it.message}"
-                    }
-                },
-                onPrinter = { showPrinter = true },
-                onPrint = { scope.launch { state.printDocument() } },
-            )
-
-            HorizontalDivider(color = palette.border)
-
-            Row(Modifier.weight(1f).fillMaxWidth()) {
-                DocumentSidebar(
-                    state = state,
-                    onAddText = { state.addText() },
-                    onAddImage = {
-                        runCatching { state.platform.chooseImage() }.onSuccess { image ->
-                            if (image != null) state.addImage(image)
-                        }.onFailure {
-                            state.statusMessage = "Could not load image: ${it.message}"
-                        }
-                    },
-                    modifier = Modifier.width(252.dp).fillMaxHeight(),
-                )
-                Column(Modifier.weight(1f).fillMaxHeight()) {
-                    LabelCanvas(state, Modifier.weight(1f).fillMaxWidth())
-                    HorizontalDivider(color = palette.border)
-                    PreviewBar(
-                        state = state,
-                        onPrinter = { showPrinter = true },
-                        onPrint = { scope.launch { state.printDocument() } },
-                        modifier = Modifier.fillMaxWidth().height(214.dp),
-                    )
-                }
-                Box(
-                    Modifier
-                        .width(1.dp)
-                        .fillMaxHeight()
-                        .background(palette.border),
-                )
-                InspectorPanel(state, Modifier.width(334.dp).fillMaxHeight())
+    val addImage: () -> Unit = {
+        scope.launch {
+            try {
+                val image = state.platform.chooseImage()
+                if (image != null) state.addImage(image)
+            } catch (error: Exception) {
+                state.statusMessage = "Could not load image: ${error.message}"
             }
+        }
+    }
 
-            HorizontalDivider(color = palette.border)
-            StatusBar(state)
+    Surface(
+        color = palette.window,
+        modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing),
+    ) {
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            if (maxWidth < 900.dp) {
+                CompactLayout(
+                    state = state,
+                    onAddImage = addImage,
+                    onShowPrinter = { showPrinter = true },
+                )
+            } else {
+                WideLayout(
+                    state = state,
+                    onAddImage = addImage,
+                    onShowPrinter = { showPrinter = true },
+                )
+            }
         }
     }
 
@@ -131,6 +113,280 @@ fun ThermlingApp(state: ThermlingState) {
                     state.printDocument()
                 }
             },
+        )
+    }
+}
+
+@Composable
+private fun WideLayout(
+    state: ThermlingState,
+    onAddImage: () -> Unit,
+    onShowPrinter: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val palette = LocalThermlingPalette.current
+
+    Column(Modifier.fillMaxSize()) {
+        TopBar(
+            state = state,
+            onNew = { state.newDocument() },
+            onOpen = { scope.launch { state.openDocument() } },
+            onSave = { scope.launch { state.saveDocument() } },
+            onSaveAs = { scope.launch { state.saveDocumentAs() } },
+            onAddText = { state.addText() },
+            onAddImage = onAddImage,
+            onPrinter = onShowPrinter,
+            onPrint = { scope.launch { state.printDocument() } },
+        )
+
+        HorizontalDivider(color = palette.border)
+
+        Row(Modifier.weight(1f).fillMaxWidth()) {
+            DocumentSidebar(
+                state = state,
+                onAddText = { state.addText() },
+                onAddImage = onAddImage,
+                modifier = Modifier.width(252.dp).fillMaxHeight(),
+            )
+            Column(Modifier.weight(1f).fillMaxHeight()) {
+                LabelCanvas(state, Modifier.weight(1f).fillMaxWidth())
+                HorizontalDivider(color = palette.border)
+                PreviewBar(
+                    state = state,
+                    onPrinter = onShowPrinter,
+                    onPrint = { scope.launch { state.printDocument() } },
+                    modifier = Modifier.fillMaxWidth().height(214.dp),
+                )
+            }
+            Box(
+                Modifier
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .background(palette.border),
+            )
+            InspectorPanel(state, Modifier.width(334.dp).fillMaxHeight())
+        }
+
+        HorizontalDivider(color = palette.border)
+        StatusBar(state)
+    }
+}
+
+@Composable
+private fun CompactLayout(
+    state: ThermlingState,
+    onAddImage: () -> Unit,
+    onShowPrinter: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val palette = LocalThermlingPalette.current
+    var tab by remember { mutableStateOf(CompactTab.DESIGN) }
+    val onPrint: () -> Unit = { scope.launch { state.printDocument() } }
+
+    Column(Modifier.fillMaxSize()) {
+        CompactTopBar(
+            state = state,
+            onNew = { state.newDocument() },
+            onOpen = { scope.launch { state.openDocument() } },
+            onSave = { scope.launch { state.saveDocument() } },
+            onAddText = { state.addText() },
+            onAddImage = onAddImage,
+            onShowPrinter = onShowPrinter,
+            onPrint = onPrint,
+        )
+        HorizontalDivider(color = palette.border)
+
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .background(palette.surface)
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 6.dp),
+        ) {
+            CompactTab.entries.forEach { entry ->
+                TextButton(
+                    onClick = { tab = entry },
+                    modifier = Modifier.testTag("compact-tab-${entry.name.lowercase()}"),
+                ) {
+                    Text(
+                        entry.label,
+                        color = if (tab == entry) palette.accent else palette.muted,
+                        fontWeight = if (tab == entry) FontWeight.SemiBold else FontWeight.Normal,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+        }
+        HorizontalDivider(color = palette.border)
+
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            when (tab) {
+                CompactTab.DESIGN -> LabelCanvas(state, Modifier.fillMaxSize())
+                CompactTab.LABEL -> DocumentSidebar(
+                    state = state,
+                    onAddText = { state.addText() },
+                    onAddImage = onAddImage,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                CompactTab.ELEMENT -> InspectorPanel(state, Modifier.fillMaxSize())
+                CompactTab.PREVIEW -> CompactPreview(
+                    state = state,
+                    onPrinter = onShowPrinter,
+                    onPrint = onPrint,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+
+        HorizontalDivider(color = palette.border)
+        StatusBar(state)
+    }
+}
+
+@Composable
+private fun CompactTopBar(
+    state: ThermlingState,
+    onNew: () -> Unit,
+    onOpen: () -> Unit,
+    onSave: () -> Unit,
+    onAddText: () -> Unit,
+    onAddImage: () -> Unit,
+    onShowPrinter: () -> Unit,
+    onPrint: () -> Unit,
+) {
+    val palette = LocalThermlingPalette.current
+    Column(Modifier.fillMaxWidth().background(palette.surface)) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Thermling", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Text(
+                    state.platform.editionLabel,
+                    color = palette.muted,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            TextButton(onClick = onShowPrinter, modifier = Modifier.testTag("printer-toolbar")) {
+                Text(if (state.isConnected) "Printer ●" else "Printer…", fontSize = 12.sp)
+            }
+            Button(onClick = onPrint, enabled = state.canPrint) {
+                Text(if (state.busy) "Working…" else "Print", fontSize = 12.sp)
+            }
+        }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 4.dp, vertical = 1.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextButton(onClick = onNew) { Text("New", fontSize = 12.sp) }
+            TextButton(onClick = onOpen) { Text("Open", fontSize = 12.sp) }
+            TextButton(onClick = onSave) { Text("Save", fontSize = 12.sp) }
+            TextButton(onClick = { state.undo() }, enabled = state.canUndo) {
+                Text("Undo", fontSize = 12.sp)
+            }
+            TextButton(onClick = { state.redo() }, enabled = state.canRedo) {
+                Text("Redo", fontSize = 12.sp)
+            }
+            TextButton(onClick = onAddText, modifier = Modifier.testTag("add-text-top")) {
+                Text("+ Text", fontSize = 12.sp)
+            }
+            TextButton(onClick = onAddImage, modifier = Modifier.testTag("add-image-top")) {
+                Text("+ Image", fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactPreview(
+    state: ThermlingState,
+    onPrinter: () -> Unit,
+    onPrint: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val palette = LocalThermlingPalette.current
+    val result = state.preview
+    Column(
+        modifier
+            .background(palette.surfaceAlt)
+            .verticalScroll(rememberScrollState())
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(240.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(palette.previewBg)
+                .border(1.dp, palette.border, RoundedCornerShape(6.dp))
+                .padding(8.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (result != null) {
+                val ratio = result.preview.width.toFloat() / max(1, result.preview.height).toFloat()
+                Image(
+                    bitmap = result.preview,
+                    contentDescription = "Print preview",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .aspectRatio(ratio)
+                        .background(LabelPaper)
+                        .border(1.dp, palette.pageEdge),
+                )
+            } else {
+                Text(
+                    state.renderError ?: "Rendering…",
+                    color = if (state.renderError == null) palette.muted else palette.danger,
+                    fontSize = 12.sp,
+                )
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Stepper(
+                label = "Density",
+                value = state.settings.density,
+                range = 1..15,
+                onChange = { value -> state.updateSettings { it.copy(density = value) } },
+                modifier = Modifier.weight(1f),
+            )
+            Stepper(
+                label = "Copies",
+                value = state.settings.copies,
+                range = 1..20,
+                onChange = { value -> state.updateSettings { it.copy(copies = value) } },
+                modifier = Modifier.weight(1f),
+            )
+        }
+        KeyValueRow("Dots", result?.let { "${it.widthDots} × ${it.heightDots}" } ?: "—")
+        KeyValueRow("Mode", result?.halftone ?: "—")
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Button(onClick = onPrint, enabled = state.canPrint) {
+                Text(if (state.busy) "Working…" else "Print label")
+            }
+            TextButton(onClick = onPrinter, modifier = Modifier.testTag("printer-preview")) {
+                Text("Connection…", fontSize = 12.sp)
+            }
+            if (state.busy && state.connection == ConnectionState.CONNECTING) {
+                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+            }
+        }
+        Text(
+            state.statusMessage,
+            color = if (state.connection == ConnectionState.ERROR) palette.danger else palette.muted,
+            fontSize = 11.sp,
         )
     }
 }
@@ -159,7 +415,7 @@ private fun TopBar(
         Column(Modifier.width(210.dp)) {
             Text("Thermling", color = palette.text, fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Text(
-                "Desktop MVP",
+                state.platform.editionLabel,
                 color = palette.muted,
                 fontSize = 10.sp,
             )
@@ -484,6 +740,6 @@ private fun elementLabel(element: com.thermling.model.LabelElement): String = wh
 }
 
 fun documentTitle(state: ThermlingState): String {
-    val name = state.documentPath?.substringAfterLast('/') ?: state.document.name
+    val name = state.documentPath?.let(state.platform::displayName) ?: state.document.name
     return "$name${if (state.dirty) " *" else ""}"
 }

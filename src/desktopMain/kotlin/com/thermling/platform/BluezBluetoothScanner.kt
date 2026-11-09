@@ -69,20 +69,16 @@ internal fun mergeScanResults(
 ): List<BluetoothDeviceInfo> {
     val discovered = parseScanDevices(scanOutput).associateBy { it.address }
     val known = parseKnownDevices(devicesOutput).associateBy { it.address }
-    return (known.keys + discovered.keys)
-        .map { address ->
+    return sortBluetoothDevices(
+        (known.keys + discovered.keys).map { address ->
             val knownName = known[address]?.name.orEmpty()
             val discoveredName = discovered[address]?.name.orEmpty()
             BluetoothDeviceInfo(
                 address = address,
                 name = knownName.ifBlank { discoveredName },
             )
-        }
-        .sortedWith(
-            compareByDescending<BluetoothDeviceInfo> { looksLikePrinter(it.name) }
-                .thenBy { it.displayName.lowercase() }
-                .thenBy { it.address },
-        )
+        },
+    )
 }
 
 internal fun parseKnownDevices(output: String): List<BluetoothDeviceInfo> =
@@ -105,11 +101,6 @@ private fun MatchResult.toDevice(): BluetoothDeviceInfo = BluetoothDeviceInfo(
     address = groupValues[1].uppercase(),
     name = groupValues.getOrElse(2) { "" }.trim(),
 )
-
-private fun looksLikePrinter(name: String): Boolean {
-    val lower = name.lowercase()
-    return listOf("p21", "p22", "nelko", "printer", "thermal", "label").any(lower::contains)
-}
 
 private fun stripAnsi(value: String): String = ANSI_ESCAPE.replace(value, "")
 

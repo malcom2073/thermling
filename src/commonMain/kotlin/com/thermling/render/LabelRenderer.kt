@@ -3,6 +3,8 @@ package com.thermling.render
 import androidx.compose.ui.graphics.ImageBitmap
 import com.thermling.model.LabelDocument
 
+class RenderError(message: String, cause: Throwable? = null) : Exception(message, cause)
+
 data class RenderResult(
     val widthDots: Int,
     val heightDots: Int,
