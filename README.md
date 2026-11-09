@@ -101,6 +101,14 @@ JAVA_HOME=/path/to/jdk-17 ./gradlew assembleDebug
 adb install -r build/outputs/apk/debug/thermling-debug.apk
 ```
 
+Release builds are signed only when a local signing config is present. Create
+`$HOME/.config/thermling/keystore.properties` (or point
+`THERMLING_KEYSTORE_PROPERTIES` at it) with `storeFile`, `storePassword`,
+`keyAlias`, and `keyPassword`. Without it, `assembleRelease` produces an
+unsigned APK that Android refuses to install. Because a release signed with a
+different key cannot update a debug installation, uninstall `com.thermling`
+first when switching between them.
+
 On first launch Thermling asks for **Nearby devices** permission on Android 12+
 (`BLUETOOTH_SCAN` and `BLUETOOTH_CONNECT`). Android 8–11 use location permission
 for Bluetooth discovery. If the permission was denied, enable it under
@@ -129,8 +137,19 @@ ANDROID_HOME=/path/to/android-sdk ./gradlew testDebugUnitTest
 
 # Full build and desktop distributable
 ANDROID_HOME=/path/to/android-sdk DISPLAY= WAYLAND_DISPLAY= ./gradlew build createDistributable
-./gradlew packageDeb       # or packageRpm / packageAppImage
+./gradlew packageDeb                # or packageRpm
+./gradlew packageLinuxAppImage      # portable Linux .AppImage
 ```
+
+`packageLinuxAppImage` wraps the jpackage app image in a real `.AppImage` at
+`build/compose/binaries/main/appimage/Thermling-<version>-<arch>.AppImage`.
+The first run downloads `appimagetool` into `~/.cache/thermling`; its AppImage
+bundles `mksquashfs`, so no system packages are required. Set `APPIMAGETOOL` to
+use an existing tool instead.
+
+Note that Compose's built-in `packageAppImage` task only creates the unpacked
+jpackage app-image directory (`build/compose/binaries/main/app/Thermling/`).
+Use `packageLinuxAppImage` when you need a single portable file.
 
 The tests cover protocol framing and parsing, document serialization, transport
 behavior, the renderer's packed bitmap and landscape rotation, state/undo/print

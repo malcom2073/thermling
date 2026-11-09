@@ -1,7 +1,9 @@
 @file:OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
 
+import org.apache.tools.ant.taskdefs.condition.Os
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     kotlin("multiplatform") version "2.1.21"
@@ -64,6 +66,15 @@ kotlin {
     }
 }
 
+val releaseSigningProperties = Properties().apply {
+    val path = System.getenv("THERMLING_KEYSTORE_PROPERTIES")
+        ?: "${System.getProperty("user.home")}/.config/thermling/keystore.properties"
+    val propertiesFile = file(path)
+    if (propertiesFile.isFile) {
+        propertiesFile.inputStream().use { load(it) }
+    }
+}
+
 android {
     namespace = "com.thermling.android"
     compileSdk = 35
@@ -75,6 +86,25 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = project.version.toString()
+    }
+
+    signingConfigs {
+        if (releaseSigningProperties.getProperty("storeFile") != null) {
+            create("release") {
+                storeFile = file(releaseSigningProperties.getProperty("storeFile"))
+                storePassword = releaseSigningProperties.getProperty("storePassword")
+                keyAlias = releaseSigningProperties.getProperty("keyAlias")
+                keyPassword = releaseSigningProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            if (releaseSigningProperties.getProperty("storeFile") != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
     }
 
     sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
@@ -104,6 +134,39 @@ compose.desktop {
             }
         }
     }
+}
+
+val packageLinuxAppImage by tasks.registering(Exec::class) {
+    group = "distribution"
+    description = "Build a portable Linux .AppImage from the jpackage app image"
+
+    dependsOn("createDistributable")
+
+    val appName = "Thermling"
+    val appImageDir = layout.buildDirectory.dir("compose/binaries/main/app/$appName")
+    val outputDir = layout.buildDirectory.dir("compose/binaries/main/appimage")
+    val appVersion = project.version.toString()
+    val appArch = when (System.getProperty("os.arch")) {
+        "amd64", "x86_64" -> "x86_64"
+        "aarch64", "arm64" -> "aarch64"
+        else -> System.getProperty("os.arch")
+    }
+    val script = layout.projectDirectory.file("scripts/package-appimage.sh")
+
+    inputs.dir(appImageDir)
+    inputs.file(script)
+    outputs.file(outputDir.map { it.file("$appName-$appVersion-$appArch.AppImage") })
+
+    commandLine(
+        "bash",
+        script.asFile.absolutePath,
+        appImageDir.get().asFile.absolutePath,
+        outputDir.get().asFile.absolutePath,
+        appVersion,
+        appArch,
+    )
+
+    onlyIf { Os.isFamily(Os.FAMILY_UNIX) && !Os.isFamily(Os.FAMILY_MAC) }
 }
 
 tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
