@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.thermling.app.ConnectionState
 import com.thermling.app.ThermlingState
+import com.thermling.model.BarcodeElement
 import com.thermling.model.ImageElement
 import com.thermling.model.LABEL_PRESETS
 import com.thermling.model.TextElement
@@ -82,6 +83,7 @@ fun ThermlingApp(state: ThermlingState) {
             }
         }
     }
+    val addBarcode: () -> Unit = { state.addBarcode() }
 
     Surface(
         color = palette.window,
@@ -92,12 +94,14 @@ fun ThermlingApp(state: ThermlingState) {
                 CompactLayout(
                     state = state,
                     onAddImage = addImage,
+                    onAddBarcode = addBarcode,
                     onShowPrinter = { showPrinter = true },
                 )
             } else {
                 WideLayout(
                     state = state,
                     onAddImage = addImage,
+                    onAddBarcode = addBarcode,
                     onShowPrinter = { showPrinter = true },
                 )
             }
@@ -121,6 +125,7 @@ fun ThermlingApp(state: ThermlingState) {
 private fun WideLayout(
     state: ThermlingState,
     onAddImage: () -> Unit,
+    onAddBarcode: () -> Unit,
     onShowPrinter: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -135,6 +140,7 @@ private fun WideLayout(
             onSaveAs = { scope.launch { state.saveDocumentAs() } },
             onAddText = { state.addText() },
             onAddImage = onAddImage,
+            onAddBarcode = onAddBarcode,
             onPrinter = onShowPrinter,
             onPrint = { scope.launch { state.printDocument() } },
         )
@@ -146,6 +152,7 @@ private fun WideLayout(
                 state = state,
                 onAddText = { state.addText() },
                 onAddImage = onAddImage,
+                onAddBarcode = onAddBarcode,
                 modifier = Modifier.width(252.dp).fillMaxHeight(),
             )
             Column(Modifier.weight(1f).fillMaxHeight()) {
@@ -176,6 +183,7 @@ private fun WideLayout(
 private fun CompactLayout(
     state: ThermlingState,
     onAddImage: () -> Unit,
+    onAddBarcode: () -> Unit,
     onShowPrinter: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -191,6 +199,7 @@ private fun CompactLayout(
             onSave = { scope.launch { state.saveDocument() } },
             onAddText = { state.addText() },
             onAddImage = onAddImage,
+            onAddBarcode = onAddBarcode,
             onShowPrinter = onShowPrinter,
             onPrint = onPrint,
         )
@@ -226,6 +235,7 @@ private fun CompactLayout(
                     state = state,
                     onAddText = { state.addText() },
                     onAddImage = onAddImage,
+                    onAddBarcode = onAddBarcode,
                     modifier = Modifier.fillMaxSize(),
                 )
                 CompactTab.ELEMENT -> InspectorPanel(state, Modifier.fillMaxSize())
@@ -251,6 +261,7 @@ private fun CompactTopBar(
     onSave: () -> Unit,
     onAddText: () -> Unit,
     onAddImage: () -> Unit,
+    onAddBarcode: () -> Unit,
     onShowPrinter: () -> Unit,
     onPrint: () -> Unit,
 ) {
@@ -299,6 +310,9 @@ private fun CompactTopBar(
             }
             TextButton(onClick = onAddImage, modifier = Modifier.testTag("add-image-top")) {
                 Text("+ Image", fontSize = 12.sp)
+            }
+            TextButton(onClick = onAddBarcode, modifier = Modifier.testTag("add-barcode-top")) {
+                Text("+ Barcode", fontSize = 12.sp)
             }
         }
     }
@@ -400,6 +414,7 @@ private fun TopBar(
     onSaveAs: () -> Unit,
     onAddText: () -> Unit,
     onAddImage: () -> Unit,
+    onAddBarcode: () -> Unit,
     onPrinter: () -> Unit,
     onPrint: () -> Unit,
 ) {
@@ -442,6 +457,9 @@ private fun TopBar(
         TextButton(onClick = onAddImage, modifier = Modifier.testTag("add-image-top")) {
             Text("+ Image")
         }
+        TextButton(onClick = onAddBarcode, modifier = Modifier.testTag("add-barcode-top")) {
+            Text("+ Barcode")
+        }
         Text(
             documentTitle(state),
             color = palette.muted,
@@ -465,6 +483,7 @@ private fun DocumentSidebar(
     state: ThermlingState,
     onAddText: () -> Unit,
     onAddImage: () -> Unit,
+    onAddBarcode: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalThermlingPalette.current
@@ -526,7 +545,7 @@ private fun DocumentSidebar(
         SectionCard("Elements") {
             if (document.elements.isEmpty()) {
                 Text(
-                    "Add text or an image to start composing.",
+                    "Add text, an image, or a barcode to start composing.",
                     color = palette.muted,
                     fontSize = 11.sp,
                 )
@@ -538,7 +557,11 @@ private fun DocumentSidebar(
                             onClick = { state.select(element.id) },
                         ) {
                             Text(
-                                if (element is TextElement) "T" else "IMG",
+                                when (element) {
+                                    is TextElement -> "T"
+                                    is ImageElement -> "IMG"
+                                    is BarcodeElement -> "BAR"
+                                },
                                 color = palette.accent,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 10.sp,
@@ -564,6 +587,10 @@ private fun DocumentSidebar(
                     onClick = onAddImage,
                     modifier = Modifier.weight(1f),
                 ) { Text("+ Image", fontSize = 12.sp) }
+                TextButton(
+                    onClick = onAddBarcode,
+                    modifier = Modifier.weight(1f),
+                ) { Text("+ Barcode", fontSize = 12.sp) }
             }
         }
 
@@ -737,6 +764,7 @@ private fun StatusBar(state: ThermlingState) {
 private fun elementLabel(element: com.thermling.model.LabelElement): String = when (element) {
     is TextElement -> element.text.lineSequence().firstOrNull()?.ifBlank { "Text" } ?: "Text"
     is ImageElement -> element.sourceName.ifBlank { "Image" }
+    is BarcodeElement -> "${element.format.label}: ${element.value}"
 }
 
 fun documentTitle(state: ThermlingState): String {

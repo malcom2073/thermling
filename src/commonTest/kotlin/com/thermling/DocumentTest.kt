@@ -1,5 +1,7 @@
 package com.thermling
 
+import com.thermling.barcode.BarcodeFormat
+import com.thermling.model.BarcodeElement
 import com.thermling.model.DocumentCodec
 import com.thermling.model.DocumentException
 import com.thermling.model.Halftone
@@ -16,7 +18,7 @@ import kotlin.test.assertTrue
 
 class DocumentTest {
     @Test
-    fun roundTripsSchemaVersionTwo() {
+    fun roundTripsSchemaVersionThree() {
         val document = LabelDocument(
             name = "Round trip",
             widthMm = 14.0,
@@ -46,14 +48,26 @@ class DocumentTest {
                     widthMm = 10.0,
                     heightMm = 10.0,
                 ),
+                BarcodeElement(
+                    id = "barcode-1",
+                    value = "12345670",
+                    format = BarcodeFormat.CODE128,
+                    xMm = 1.0,
+                    yMm = 26.0,
+                    widthMm = 10.0,
+                    heightMm = 12.0,
+                    showText = true,
+                ),
             ),
         )
 
         val raw = DocumentCodec.encode(document)
-        assertTrue(raw.contains("\"version\": 2"))
+        assertTrue(raw.contains("\"version\": 3"))
         assertTrue(raw.contains("\"orientation\": \"portrait\""))
         assertTrue(raw.contains("\"halftone\": \"auto\""))
         assertTrue(raw.contains("\"thermal_correction\": true"))
+        assertTrue(raw.contains("\"type\": \"barcode\""))
+        assertTrue(raw.contains("\"barcode_format\": \"code128\""))
 
         val decoded = DocumentCodec.decode(raw)
         assertEquals(document, decoded)
@@ -83,11 +97,16 @@ class DocumentTest {
     @Test
     fun rejectsFutureSchemaAndBadElements() {
         assertFailsWith<DocumentException> {
-            DocumentCodec.decode("""{"version": 3}""")
+            DocumentCodec.decode("""{"version": 4}""")
         }
         assertFailsWith<DocumentException> {
             DocumentCodec.decode(
-                """{"version": 2, "elements": [{"type": "barcode", "text": "123"}]}""",
+                """{"version": 3, "elements": [{"type": "qrcode", "text": "123"}]}""",
+            )
+        }
+        assertFailsWith<DocumentException> {
+            DocumentCodec.decode(
+                """{"version": 3, "elements": [{"type": "barcode", "barcode_format": "pdf417"}]}""",
             )
         }
     }

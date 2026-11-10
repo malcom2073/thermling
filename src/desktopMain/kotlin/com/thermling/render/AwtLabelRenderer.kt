@@ -1,5 +1,8 @@
 package com.thermling.render
 
+import com.thermling.barcode.BarcodeEncoder
+import com.thermling.barcode.BarcodeException
+import com.thermling.model.BarcodeElement
 import com.thermling.model.ImageElement
 import com.thermling.model.ImageFit
 import com.thermling.model.LabelDocument
@@ -62,6 +65,7 @@ class AwtLabelRenderer : LabelRenderer {
                 when (element) {
                     is TextElement -> drawText(graphics, element, rect, dpi)
                     is ImageElement -> drawImage(graphics, element, rect)
+                    is BarcodeElement -> drawBarcode(graphics, element, rect, dpi)
                 }
             }
         } finally {
@@ -214,6 +218,60 @@ class AwtLabelRenderer : LabelRenderer {
             if (line.isNotEmpty()) result += line
         }
         return if (result.isEmpty()) listOf("") else result
+    }
+
+    private fun drawBarcode(
+        graphics: Graphics2D,
+        element: BarcodeElement,
+        rect: Rectangle2D.Double,
+        dpi: Int,
+    ) {
+        val encoding = try {
+            BarcodeEncoder.encode(element.format, element.value)
+        } catch (error: BarcodeException) {
+            throw RenderError(error.message ?: "Invalid barcode", error)
+        }
+
+        val textHeight = if (element.showText) {
+            min(rect.height * 0.24, 4.0 * dpi / 25.4)
+        } else {
+            0.0
+        }
+        val gap = if (element.showText) max(1.0, dpi / 203.0) else 0.0
+        val barHeight = max(1.0, rect.height - textHeight - gap)
+        val moduleWidth = rect.width / encoding.totalModules
+        val left = rect.x + encoding.quietZoneModules * moduleWidth
+
+        var index = 0
+        while (index < encoding.modules.length) {
+            if (encoding.modules[index] == '1') {
+                val start = index
+                while (index < encoding.modules.length && encoding.modules[index] == '1') {
+                    index++
+                }
+                val x = (left + start * moduleWidth).roundToInt()
+                val end = (left + index * moduleWidth).roundToInt().coerceAtLeast(x + 1)
+                graphics.fillRect(x, rect.y.roundToInt(), end - x, barHeight.roundToInt())
+            } else {
+                index++
+            }
+        }
+
+        if (element.showText && encoding.text.isNotEmpty()) {
+            val byHeight = (textHeight * 0.76).roundToInt()
+            val byWidth = (rect.width / encoding.text.length / 0.62).toInt()
+            val fontPx = max(1, min(byHeight, byWidth))
+            graphics.font = Font("Monospaced", Font.PLAIN, fontPx)
+            val metrics = graphics.fontMetrics
+            val baseline = rect.y + barHeight + gap +
+                (textHeight - metrics.height) / 2.0 + metrics.ascent
+            val textWidth = metrics.stringWidth(encoding.text).toDouble()
+            val textX = rect.x + (rect.width - textWidth) / 2.0
+            val oldClip = graphics.clip
+            graphics.clip(rect)
+            graphics.drawString(encoding.text, textX.toFloat(), baseline.toFloat())
+            graphics.clip = oldClip
+        }
     }
 
     private fun drawImage(graphics: Graphics2D, element: ImageElement, rect: Rectangle2D.Double) {

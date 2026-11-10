@@ -4,6 +4,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.thermling.barcode.BarcodeFormat
+import com.thermling.model.BarcodeElement
 import com.thermling.model.DocumentCodec
 import com.thermling.model.DocumentException
 import com.thermling.model.ImageElement
@@ -204,6 +206,12 @@ class ThermlingState(val platform: Platform) {
                             widthMm = element.heightMm,
                             heightMm = element.widthMm,
                         )
+                        is BarcodeElement -> element.copy(
+                            xMm = element.yMm,
+                            yMm = element.xMm,
+                            widthMm = element.heightMm,
+                            heightMm = element.widthMm,
+                        )
                     }
                 }
             } else {
@@ -216,6 +224,10 @@ class ThermlingState(val platform: Platform) {
                         yMm = min(element.yMm, max(0.0, pageHeight - element.heightMm)),
                     )
                     is ImageElement -> element.copy(
+                        xMm = min(element.xMm, max(0.0, pageWidth - element.widthMm)),
+                        yMm = min(element.yMm, max(0.0, pageHeight - element.heightMm)),
+                    )
+                    is BarcodeElement -> element.copy(
                         xMm = min(element.xMm, max(0.0, pageWidth - element.widthMm)),
                         yMm = min(element.yMm, max(0.0, pageHeight - element.heightMm)),
                     )
@@ -246,6 +258,12 @@ class ThermlingState(val platform: Platform) {
                             heightMm = element.widthMm,
                         )
                         is ImageElement -> element.copy(
+                            xMm = element.yMm,
+                            yMm = element.xMm,
+                            widthMm = element.heightMm,
+                            heightMm = element.widthMm,
+                        )
+                        is BarcodeElement -> element.copy(
                             xMm = element.yMm,
                             yMm = element.xMm,
                             widthMm = element.heightMm,
@@ -309,6 +327,22 @@ class ThermlingState(val platform: Platform) {
         selectionId = element.id
     }
 
+    fun addBarcode() {
+        val (pageWidth, pageHeight) = pageSizeMm
+        val width = min(max(2.0, pageWidth - 1.0), 40.0)
+        val height = min(max(6.0, pageHeight - 2.0), 14.0)
+        val element = BarcodeElement(
+            value = "1234",
+            format = BarcodeFormat.CODE128,
+            xMm = max(0.0, (pageWidth - width) / 2.0),
+            yMm = max(0.0, min(2.0, pageHeight - height)),
+            widthMm = width,
+            heightMm = height,
+        )
+        edit("Add barcode") { it.add(element) }
+        selectionId = element.id
+    }
+
     fun replaceImage(elementId: String, image: PickedImage) {
         val element = document.find(elementId) as? ImageElement ?: return
         edit("Replace image") {
@@ -327,6 +361,11 @@ class ThermlingState(val platform: Platform) {
                 yMm = min(source.yMm + 1.0, max(0.0, pageHeight - source.heightMm)),
             )
             is ImageElement -> source.copy(
+                id = com.thermling.model.newId(),
+                xMm = min(source.xMm + 1.0, max(0.0, pageWidth - source.widthMm)),
+                yMm = min(source.yMm + 1.0, max(0.0, pageHeight - source.heightMm)),
+            )
+            is BarcodeElement -> source.copy(
                 id = com.thermling.model.newId(),
                 xMm = min(source.xMm + 1.0, max(0.0, pageWidth - source.widthMm)),
                 yMm = min(source.yMm + 1.0, max(0.0, pageHeight - source.heightMm)),

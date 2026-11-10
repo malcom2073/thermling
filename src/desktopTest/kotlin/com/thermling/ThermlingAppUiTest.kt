@@ -37,6 +37,23 @@ class ThermlingAppUiTest {
     }
 
     @Test
+    fun addingABarcodeFromTheToolbarUpdatesStateAndPreview() = runComposeUiTest {
+        val state = ThermlingState(TestPlatform())
+        setContent { ThermlingTheme { ThermlingApp(state) } }
+
+        onNodeWithTag("add-barcode-top").assertIsDisplayed().performClick()
+        waitForIdle()
+
+        assertEquals(1, state.document.elements.size)
+        assertTrue(state.document.elements.single() is com.thermling.model.BarcodeElement)
+        waitUntil(timeoutMillis = 5_000) { state.preview != null }
+        val preview = assertNotNull(state.preview)
+        assertEquals(96, preview.widthDots)
+        assertEquals(320, preview.heightDots)
+        assertNotNull(state.selectedElement)
+    }
+
+    @Test
     fun previewConnectionButtonOpensThePrinterDialog() = runComposeUiTest {
         val state = ThermlingState(TestPlatform())
         setContent { ThermlingTheme { ThermlingApp(state) } }

@@ -14,6 +14,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,6 +23,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.thermling.app.ThermlingState
+import com.thermling.barcode.BarcodeEncoder
+import com.thermling.barcode.BarcodeFormat
+import com.thermling.model.BarcodeElement
 import com.thermling.model.Halftone
 import com.thermling.model.HorizontalAlign
 import com.thermling.model.ImageElement
@@ -53,7 +57,7 @@ fun InspectorPanel(state: ThermlingState, modifier: Modifier = Modifier) {
         } else {
             SectionCard("Element") {
                 Text(
-                    "Select an element on the canvas, or add text or an image.",
+                    "Select an element on the canvas, or add text, an image, or a barcode.",
                     color = palette.muted,
                     fontSize = 11.sp,
                 )
@@ -249,7 +253,11 @@ private fun DocumentSection(state: ThermlingState) {
 private fun ElementSection(state: ThermlingState, element: LabelElement) {
     val palette = LocalThermlingPalette.current
     val id = element.id
-    val title = if (element is TextElement) "Text element" else "Image element"
+    val title = when (element) {
+        is TextElement -> "Text element"
+        is ImageElement -> "Image element"
+        is BarcodeElement -> "Barcode element"
+    }
 
     SectionCard(title) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -300,6 +308,7 @@ private fun ElementSection(state: ThermlingState, element: LabelElement) {
         when (element) {
             is TextElement -> TextElementFields(state, element)
             is ImageElement -> ImageElementFields(state, element)
+            is BarcodeElement -> BarcodeElementFields(state, element)
         }
 
         InlineDivider()
@@ -451,6 +460,68 @@ private fun ImageElementFields(state: ThermlingState, element: ImageElement) {
 }
 
 @Composable
+private fun BarcodeElementFields(state: ThermlingState, element: BarcodeElement) {
+    val palette = LocalThermlingPalette.current
+    val id = element.id
+    val result = remember(element.format, element.value) {
+        runCatching { BarcodeEncoder.encode(element.format, element.value) }
+    }
+
+    TextFieldCompact(
+        value = element.value,
+        onValueChange = { value ->
+            updateElement(state, id, "Edit barcode") { current ->
+                (current as BarcodeElement).copy(value = value)
+            }
+        },
+        label = "Data",
+    )
+    DropdownField(
+        label = "Format",
+        value = element.format,
+        options = BarcodeFormat.entries,
+        labelOf = { it.label },
+        onSelect = { format ->
+            updateElement(state, id, "Change barcode format") { current ->
+                (current as BarcodeElement).copy(format = format)
+            }
+        },
+    )
+    CheckboxLabel("Show human-readable text", element.showText) { checked ->
+        updateElement(state, id, "Change barcode text") { current ->
+            (current as BarcodeElement).copy(showText = checked)
+        }
+    }
+
+    val error = result.exceptionOrNull()
+    if (error != null) {
+        Text(
+            error.message ?: "This value cannot be encoded as a barcode.",
+            color = palette.danger,
+            fontSize = 10.sp,
+        )
+    } else {
+        val encoding = result.getOrThrow()
+        val moduleDots = element.widthMm * state.effectiveDpi / 25.4 / encoding.totalModules
+        if (moduleDots < 1.0) {
+            Text(
+                "At this width there is less than one printer dot per module. " +
+                    "Widen the element or shorten the data for a scannable barcode.",
+                color = palette.warning,
+                fontSize = 10.sp,
+            )
+        } else {
+            Text(
+                "${encoding.totalModules} modules incl. quiet zones. " +
+                    "Bars scale to the element's width and height.",
+                color = palette.muted,
+                fontSize = 10.sp,
+            )
+        }
+    }
+}
+
+@Composable
 private fun CheckboxLabel(
     label: String,
     checked: Boolean,
@@ -477,19 +548,23 @@ private fun updateElement(
 private fun LabelElement.withX(value: Double): LabelElement = when (this) {
     is TextElement -> copy(xMm = value)
     is ImageElement -> copy(xMm = value)
+    is BarcodeElement -> copy(xMm = value)
 }
 
 private fun LabelElement.withY(value: Double): LabelElement = when (this) {
     is TextElement -> copy(yMm = value)
     is ImageElement -> copy(yMm = value)
+    is BarcodeElement -> copy(yMm = value)
 }
 
 private fun LabelElement.withWidth(value: Double): LabelElement = when (this) {
     is TextElement -> copy(widthMm = value)
     is ImageElement -> copy(widthMm = value)
+    is BarcodeElement -> copy(widthMm = value)
 }
 
 private fun LabelElement.withHeight(value: Double): LabelElement = when (this) {
     is TextElement -> copy(heightMm = value)
     is ImageElement -> copy(heightMm = value)
+    is BarcodeElement -> copy(heightMm = value)
 }

@@ -1,5 +1,6 @@
 package com.thermling.model
 
+import com.thermling.barcode.BarcodeFormat
 import com.thermling.protocol.DEFAULT_HEAD_WIDTH_MM
 import com.thermling.protocol.Style
 import com.thermling.protocol.printableWidthMm
@@ -12,7 +13,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
 
-const val SCHEMA_VERSION = 2
+const val SCHEMA_VERSION = 3
 const val DEFAULT_FONT = "DejaVu Sans"
 const val DEFAULT_FONT_SIZE_PT = 10.0
 
@@ -94,6 +95,22 @@ data class ImageElement(
     val fit: ImageFit = ImageFit.CONTAIN,
 ) : LabelElement {
     override val kind: String get() = "image"
+
+    fun withBounds(x: Double, y: Double, width: Double, height: Double) =
+        copy(xMm = x, yMm = y, widthMm = width, heightMm = height)
+}
+
+data class BarcodeElement(
+    override val id: String = newId(),
+    val value: String = "1234",
+    val format: BarcodeFormat = BarcodeFormat.CODE128,
+    override val xMm: Double = 1.0,
+    override val yMm: Double = 1.0,
+    override val widthMm: Double = 10.0,
+    override val heightMm: Double = 12.0,
+    val showText: Boolean = true,
+) : LabelElement {
+    override val kind: String get() = "barcode"
 
     fun withBounds(x: Double, y: Double, width: Double, height: Double) =
         copy(xMm = x, yMm = y, widthMm = width, heightMm = height)
@@ -188,6 +205,11 @@ data class LabelDocument(
                 xMm = min(source.xMm + 1.0, max(0.0, pageWidth - source.widthMm)),
                 yMm = min(source.yMm + 1.0, max(0.0, pageHeight - source.heightMm)),
             )
+            is BarcodeElement -> source.copy(
+                id = newId(),
+                xMm = min(source.xMm + 1.0, max(0.0, pageWidth - source.widthMm)),
+                yMm = min(source.yMm + 1.0, max(0.0, pageHeight - source.heightMm)),
+            )
         }
         return add(clone)
     }
@@ -272,6 +294,9 @@ private data class ElementDto(
     val png_base64: String? = null,
     val source_name: String? = null,
     val fit: String? = null,
+    val barcode_value: String? = null,
+    val barcode_format: String? = null,
+    val show_text: Boolean? = null,
 )
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -335,6 +360,7 @@ object DocumentCodec {
                         element = when (element) {
                             is TextElement -> element.copy(id = newId())
                             is ImageElement -> element.copy(id = newId())
+                            is BarcodeElement -> element.copy(id = newId())
                         }
                     }
                     seen.add(element.id)
@@ -375,6 +401,17 @@ object DocumentCodec {
             height_mm = heightMm,
             fit = fit.value,
         )
+        is BarcodeElement -> ElementDto(
+            type = "barcode",
+            id = id,
+            x_mm = xMm,
+            y_mm = yMm,
+            width_mm = widthMm,
+            height_mm = heightMm,
+            barcode_value = value,
+            barcode_format = format.value,
+            show_text = showText,
+        )
     }
 
     private fun ElementDto.toElement(): LabelElement {
@@ -410,6 +447,16 @@ object DocumentCodec {
                 heightMm = height,
                 fit = parseFit(fit ?: "contain"),
             )
+            "barcode" -> BarcodeElement(
+                id = elementId,
+                value = barcode_value ?: "",
+                format = parseBarcodeFormat(barcode_format ?: "code128"),
+                xMm = x,
+                yMm = y,
+                widthMm = width,
+                heightMm = height,
+                showText = show_text ?: true,
+            )
             else -> throw DocumentException("Unknown element type: $type")
         }
     }
@@ -440,6 +487,10 @@ object DocumentCodec {
     private fun parseFit(raw: String): ImageFit =
         ImageFit.entries.firstOrNull { it.value == raw.trim().lowercase() }
             ?: ImageFit.CONTAIN
+
+    private fun parseBarcodeFormat(raw: String): BarcodeFormat =
+        BarcodeFormat.fromValue(raw)
+            ?: throw DocumentException("Unknown barcode format: $raw")
 
     private fun clamp(value: Double, low: Double, high: Double): Double = min(high, max(low, value))
 }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
@@ -23,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -39,6 +41,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.thermling.app.ThermlingState
+import com.thermling.barcode.BarcodeEncoder
+import com.thermling.model.BarcodeElement
 import com.thermling.model.HorizontalAlign
 import com.thermling.model.ImageElement
 import com.thermling.model.ImageFit
@@ -112,7 +116,7 @@ fun LabelCanvas(state: ThermlingState, modifier: Modifier = Modifier) {
 
                 if (document.elements.isEmpty()) {
                     Text(
-                        "Add text or an image",
+                        "Add text, an image, or a barcode",
                         color = Color(0xFF9AA3B2),
                         fontSize = with(density) { (2.6 * scale).toFloat().toSp() },
                         modifier = Modifier.align(Alignment.Center),
@@ -194,6 +198,7 @@ private fun ElementView(
                             when (current) {
                                 is TextElement -> current.copy(xMm = x, yMm = y)
                                 is ImageElement -> current.copy(xMm = x, yMm = y)
+                                is BarcodeElement -> current.copy(xMm = x, yMm = y)
                             }.let(document::replace)
                         }
                     },
@@ -205,6 +210,7 @@ private fun ElementView(
         when (element) {
             is TextElement -> TextElementView(element, scale)
             is ImageElement -> ImageElementView(state, element)
+            is BarcodeElement -> BarcodeElementView(element, scale)
         }
 
         if (selected) {
@@ -244,6 +250,7 @@ private fun ElementView(
                                     when (current) {
                                         is TextElement -> current.copy(widthMm = widthMm, heightMm = heightMm)
                                         is ImageElement -> current.copy(widthMm = widthMm, heightMm = heightMm)
+                                        is BarcodeElement -> current.copy(widthMm = widthMm, heightMm = heightMm)
                                     }.let(document::replace)
                                 }
                             },
@@ -287,6 +294,70 @@ private fun TextElementView(element: TextElement, scale: Float) {
             overflow = TextOverflow.Clip,
             modifier = Modifier.fillMaxWidth(),
         )
+    }
+}
+
+@Composable
+private fun BarcodeElementView(element: BarcodeElement, scale: Float) {
+    val density = LocalDensity.current
+    val encoding = remember(element.format, element.value) {
+        runCatching { BarcodeEncoder.encode(element.format, element.value) }.getOrNull()
+    }
+    if (encoding == null) {
+        Box(Modifier.fillMaxSize().background(Color(0x22B3261E))) {
+            Text(
+                "Invalid barcode",
+                color = Color(0xFFB3261E),
+                fontSize = 9.sp,
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
+        return
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        Canvas(
+            Modifier
+                .fillMaxWidth()
+                .weight(if (element.showText) 0.78f else 1f),
+        ) {
+            val moduleWidth = size.width / encoding.totalModules
+            val left = encoding.quietZoneModules * moduleWidth
+            var index = 0
+            while (index < encoding.modules.length) {
+                if (encoding.modules[index] == '1') {
+                    val start = index
+                    while (index < encoding.modules.length && encoding.modules[index] == '1') {
+                        index++
+                    }
+                    drawRect(
+                        color = Color.Black,
+                        topLeft = Offset(left + start * moduleWidth, 0f),
+                        size = Size((index - start) * moduleWidth, size.height),
+                    )
+                } else {
+                    index++
+                }
+            }
+        }
+        if (element.showText) {
+            Box(
+                Modifier.fillMaxWidth().weight(0.22f),
+                contentAlignment = Alignment.Center,
+            ) {
+                val fontSize = with(density) {
+                    (element.heightMm * scale * 0.16f).toFloat().coerceAtLeast(4f).toSp()
+                }
+                Text(
+                    text = encoding.text,
+                    color = Color.Black,
+                    fontSize = fontSize,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Clip,
+                )
+            }
+        }
     }
 }
 

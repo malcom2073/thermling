@@ -10,6 +10,9 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import android.util.Base64
 import androidx.compose.ui.graphics.asImageBitmap
+import com.thermling.barcode.BarcodeEncoder
+import com.thermling.barcode.BarcodeException
+import com.thermling.model.BarcodeElement
 import com.thermling.model.ImageElement
 import com.thermling.model.ImageFit
 import com.thermling.model.LabelDocument
@@ -66,6 +69,7 @@ class AndroidLabelRenderer : LabelRenderer {
                 when (element) {
                     is TextElement -> drawText(canvas, element, rect, dpi)
                     is ImageElement -> drawImage(canvas, element, rect)
+                    is BarcodeElement -> drawBarcode(canvas, element, rect, dpi)
                 }
             }
             pixels = IntArray(pageWidthDots * pageHeightDots)
@@ -206,6 +210,64 @@ class AndroidLabelRenderer : LabelRenderer {
             if (line.isNotEmpty()) result += line
         }
         return if (result.isEmpty()) listOf("") else result
+    }
+
+    private fun drawBarcode(canvas: Canvas, element: BarcodeElement, rect: RectF, dpi: Int) {
+        val encoding = try {
+            BarcodeEncoder.encode(element.format, element.value)
+        } catch (error: BarcodeException) {
+            throw RenderError(error.message ?: "Invalid barcode", error)
+        }
+
+        val textHeight = if (element.showText) {
+            min(rect.height() * 0.24, 4.0 * dpi / 25.4).toFloat()
+        } else {
+            0f
+        }
+        val gap = if (element.showText) max(1f, dpi / 203f) else 0f
+        val barHeight = max(1f, rect.height() - textHeight - gap)
+        val moduleWidth = rect.width() / encoding.totalModules
+        val left = rect.left + encoding.quietZoneModules * moduleWidth
+
+        val barPaint = Paint().apply {
+            color = Color.BLACK
+            isAntiAlias = false
+        }
+        var index = 0
+        while (index < encoding.modules.length) {
+            if (encoding.modules[index] == '1') {
+                val start = index
+                while (index < encoding.modules.length && encoding.modules[index] == '1') {
+                    index++
+                }
+                val x = left + start * moduleWidth
+                val end = max(x + 1f, left + index * moduleWidth)
+                canvas.drawRect(x, rect.top, end, rect.top + barHeight, barPaint)
+            } else {
+                index++
+            }
+        }
+
+        if (element.showText && encoding.text.isNotEmpty()) {
+            val byHeight = (textHeight * 0.76f).toInt()
+            val byWidth = (rect.width() / encoding.text.length / 0.62f).toInt()
+            val fontPx = max(1, min(byHeight, byWidth)).toFloat()
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.BLACK
+                typeface = Typeface.MONOSPACE
+                textSize = fontPx
+                textAlign = Paint.Align.LEFT
+            }
+            val metrics = paint.fontMetrics
+            val baseline = rect.top + barHeight + gap +
+                (textHeight - (metrics.descent - metrics.ascent)) / 2f - metrics.ascent
+            val textWidth = paint.measureText(encoding.text)
+            val textX = rect.left + (rect.width() - textWidth) / 2f
+            canvas.save()
+            canvas.clipRect(rect)
+            canvas.drawText(encoding.text, textX, baseline, paint)
+            canvas.restore()
+        }
     }
 
     private fun drawImage(canvas: Canvas, element: ImageElement, rect: RectF) {

@@ -91,6 +91,23 @@ class ThermlingStateTest {
     }
 
     @Test
+    fun addBarcodeCreatesAScalableBarcodeElement() {
+        val state = ThermlingState(TestPlatform())
+
+        state.addBarcode()
+
+        assertEquals(1, state.document.elements.size)
+        val element = state.selectedElement as com.thermling.model.BarcodeElement
+        assertEquals(com.thermling.barcode.BarcodeFormat.CODE128, element.format)
+        assertEquals("1234", element.value)
+        assertTrue(element.widthMm > 0.0)
+        assertTrue(element.heightMm > 0.0)
+        assertTrue(element.xMm >= 0.0)
+        assertTrue(element.xMm + element.widthMm <= state.pageSizeMm.first + 0.001)
+        assertTrue(state.dirty)
+    }
+
+    @Test
     fun movingAndResizingAnElementIsOneUndoStep() {
         val state = ThermlingState(TestPlatform())
         state.addText()

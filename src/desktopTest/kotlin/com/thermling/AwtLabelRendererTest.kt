@@ -1,5 +1,7 @@
 package com.thermling
 
+import com.thermling.barcode.BarcodeFormat
+import com.thermling.model.BarcodeElement
 import com.thermling.model.Halftone
 import com.thermling.model.ImageElement
 import com.thermling.model.ImageFit
@@ -7,6 +9,7 @@ import com.thermling.model.LabelDocument
 import com.thermling.model.Orientation
 import com.thermling.model.TextElement
 import com.thermling.render.AwtLabelRenderer
+import com.thermling.render.RenderError
 import com.thermling.render.RenderResult
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
@@ -15,6 +18,7 @@ import javax.imageio.ImageIO
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class AwtLabelRendererTest {
@@ -157,6 +161,38 @@ class AwtLabelRendererTest {
         val shiftedFirst = firstInkColumn(shifted)
         assertTrue(plainFirst >= 0, "the test element should produce ink")
         assertEquals(8, shiftedFirst - plainFirst, "1 mm at 203 DPI is 8 dots")
+    }
+
+    @Test
+    fun barcodeProducesBarsAndRejectsInvalidData() {
+        val document = LabelDocument(
+            elements = listOf(
+                BarcodeElement(
+                    value = "12345670",
+                    format = BarcodeFormat.CODE128,
+                    xMm = 1.0,
+                    yMm = 1.0,
+                    widthMm = 10.0,
+                    heightMm = 12.0,
+                    showText = true,
+                ),
+            ),
+        )
+
+        val result = AwtLabelRenderer().render(document, 203, 12.0, 0.0, 0.0)
+        assertTrue(result.data.any { it != 0xFF.toByte() }, "the barcode should print ink")
+
+        val invalid = document.copy(
+            elements = listOf(
+                (document.elements.single() as BarcodeElement).copy(
+                    value = "not-a-valid-ean",
+                    format = BarcodeFormat.EAN13,
+                ),
+            ),
+        )
+        assertFailsWith<RenderError> {
+            AwtLabelRenderer().render(invalid, 203, 12.0, 0.0, 0.0)
+        }
     }
 
     private fun firstInkColumn(result: RenderResult): Int {
