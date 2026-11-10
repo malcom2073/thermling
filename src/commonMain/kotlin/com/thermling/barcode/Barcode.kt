@@ -2,13 +2,23 @@ package com.thermling.barcode
 
 import kotlin.math.min
 
-/** A one-dimensional barcode symbology. Two-dimensional formats can be added here later. */
-enum class BarcodeFormat(val value: String, val label: String) {
-    CODE128("code128", "Code 128"),
-    CODE39("code39", "Code 39"),
-    EAN13("ean13", "EAN-13"),
-    EAN8("ean8", "EAN-8"),
-    UPCA("upca", "UPC-A");
+/** A one-dimensional or two-dimensional barcode symbology. */
+enum class BarcodeDimension {
+    LINEAR,
+    MATRIX,
+}
+
+enum class BarcodeFormat(
+    val value: String,
+    val label: String,
+    val dimension: BarcodeDimension,
+) {
+    CODE128("code128", "Code 128", BarcodeDimension.LINEAR),
+    CODE39("code39", "Code 39", BarcodeDimension.LINEAR),
+    EAN13("ean13", "EAN-13", BarcodeDimension.LINEAR),
+    EAN8("ean8", "EAN-8", BarcodeDimension.LINEAR),
+    UPCA("upca", "UPC-A", BarcodeDimension.LINEAR),
+    QR("qr", "QR Code", BarcodeDimension.MATRIX);
 
     companion object {
         fun fromValue(raw: String): BarcodeFormat? =
@@ -16,10 +26,42 @@ enum class BarcodeFormat(val value: String, val label: String) {
     }
 }
 
+/** QR error-correction strength. The other formats ignore this setting. */
+enum class BarcodeErrorCorrection(
+    val value: String,
+    val label: String,
+    internal val formatBits: Int,
+    internal val tableIndex: Int,
+) {
+    LOW("low", "Low (7%)", 1, 0),
+    MEDIUM("medium", "Medium (15%)", 0, 1),
+    QUARTILE("quartile", "Quartile (25%)", 3, 2),
+    HIGH("high", "High (30%)", 2, 3);
+
+    companion object {
+        fun fromValue(raw: String): BarcodeErrorCorrection? =
+            entries.firstOrNull { it.value == raw.trim().lowercase() }
+    }
+}
+
 class BarcodeException(message: String) : Exception(message)
 
+/** An encoded barcode symbol, either a linear row of modules or a square matrix. */
+sealed interface BarcodeSymbol {
+    val format: BarcodeFormat
+    val text: String
+    val quietZoneModules: Int
+    val widthModules: Int
+    val heightModules: Int
+
+    val totalWidthModules: Int get() = widthModules + quietZoneModules * 2
+    val totalHeightModules: Int get() = heightModules + quietZoneModules * 2
+
+    fun isDark(x: Int, y: Int): Boolean
+}
+
 /**
- * An encoded barcode as a run of modules.
+ * A linear barcode as a run of modules.
  *
  * [modules] contains the bars and spaces of the symbol itself, with `1` for a
  * black module and `0` for a white one. [quietZoneModules] is the white space
@@ -27,20 +69,46 @@ class BarcodeException(message: String) : Exception(message)
  * [totalModules], which is what a renderer should scale the element to.
  */
 data class BarcodeEncoding(
-    val format: BarcodeFormat,
-    val text: String,
+    override val format: BarcodeFormat,
+    override val text: String,
     val modules: String,
-    val quietZoneModules: Int,
-) {
-    val totalModules: Int get() = modules.length + quietZoneModules * 2
+    override val quietZoneModules: Int,
+) : BarcodeSymbol {
+    override val widthModules: Int get() = modules.length
+    override val heightModules: Int get() = 1
+    val totalModules: Int get() = widthModules + quietZoneModules * 2
+
+    override fun isDark(x: Int, y: Int): Boolean =
+        y == 0 && x in modules.indices && modules[x] == '1'
+}
+
+/** A square QR-style matrix, stored row-major without its quiet zone. */
+class MatrixBarcodeEncoding(
+    override val format: BarcodeFormat,
+    override val text: String,
+    val size: Int,
+    val version: Int,
+    private val cells: BooleanArray,
+    override val quietZoneModules: Int,
+) : BarcodeSymbol {
+    override val widthModules: Int get() = size
+    override val heightModules: Int get() = size
+
+    init {
+        require(cells.size == size * size)
+    }
+
+    override fun isDark(x: Int, y: Int): Boolean =
+        x in 0 until size && y in 0 until size && cells[y * size + x]
 }
 
 /**
- * A small, dependency-free 1D barcode encoder.
+ * A small, dependency-free barcode encoder.
  *
- * The supported formats are deliberately limited to the ones most useful on
- * narrow thermal labels. Code 128 automatically uses subset C for an even
- * number of digits and subset B otherwise.
+ * The linear formats are limited to the ones most useful on narrow thermal
+ * labels. Code 128 automatically uses subset C for an even number of digits and
+ * subset B otherwise. QR Codes use byte mode and support all four standard
+ * error-correction levels.
  */
 object BarcodeEncoder {
     private val CODE128_PATTERNS: List<IntArray> = listOf(
@@ -132,12 +200,35 @@ object BarcodeEncoder {
     private val EAN_GUARD = intArrayOf(1, 1, 1)
     private val EAN_MIDDLE = intArrayOf(1, 1, 1, 1, 1)
 
-    fun encode(format: BarcodeFormat, value: String): BarcodeEncoding = when (format) {
+    fun encode(
+        format: BarcodeFormat,
+        value: String,
+        errorCorrection: BarcodeErrorCorrection = BarcodeErrorCorrection.MEDIUM,
+    ): BarcodeSymbol = when (format) {
         BarcodeFormat.CODE128 -> encodeCode128(value)
         BarcodeFormat.CODE39 -> encodeCode39(value)
         BarcodeFormat.EAN13 -> encodeEan13(value)
         BarcodeFormat.EAN8 -> encodeEan8(value)
         BarcodeFormat.UPCA -> encodeUpcA(value)
+        BarcodeFormat.QR -> encodeQr(value, errorCorrection)
+    }
+
+    private fun encodeQr(
+        value: String,
+        errorCorrection: BarcodeErrorCorrection,
+    ): MatrixBarcodeEncoding {
+        val qr = QrCode.encode(value, errorCorrection)
+        val cells = BooleanArray(qr.size * qr.size) { index ->
+            qr.isDark(index % qr.size, index / qr.size)
+        }
+        return MatrixBarcodeEncoding(
+            format = BarcodeFormat.QR,
+            text = value,
+            size = qr.size,
+            version = qr.version,
+            cells = cells,
+            quietZoneModules = 4,
+        )
     }
 
     private fun encodeCode128(value: String): BarcodeEncoding {

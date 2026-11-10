@@ -11,7 +11,9 @@ import android.graphics.Typeface
 import android.util.Base64
 import androidx.compose.ui.graphics.asImageBitmap
 import com.thermling.barcode.BarcodeEncoder
+import com.thermling.barcode.BarcodeEncoding
 import com.thermling.barcode.BarcodeException
+import com.thermling.barcode.MatrixBarcodeEncoding
 import com.thermling.model.BarcodeElement
 import com.thermling.model.ImageElement
 import com.thermling.model.ImageFit
@@ -214,10 +216,16 @@ class AndroidLabelRenderer : LabelRenderer {
 
     private fun drawBarcode(canvas: Canvas, element: BarcodeElement, rect: RectF, dpi: Int) {
         val encoding = try {
-            BarcodeEncoder.encode(element.format, element.value)
+            BarcodeEncoder.encode(element.format, element.value, element.errorCorrection)
         } catch (error: BarcodeException) {
             throw RenderError(error.message ?: "Invalid barcode", error)
         }
+
+        if (encoding is MatrixBarcodeEncoding) {
+            drawMatrixBarcode(canvas, encoding, rect)
+            return
+        }
+        val linear = encoding as BarcodeEncoding
 
         val textHeight = if (element.showText) {
             min(rect.height() * 0.24, 4.0 * dpi / 25.4).toFloat()
@@ -226,18 +234,18 @@ class AndroidLabelRenderer : LabelRenderer {
         }
         val gap = if (element.showText) max(1f, dpi / 203f) else 0f
         val barHeight = max(1f, rect.height() - textHeight - gap)
-        val moduleWidth = rect.width() / encoding.totalModules
-        val left = rect.left + encoding.quietZoneModules * moduleWidth
+        val moduleWidth = rect.width() / linear.totalModules
+        val left = rect.left + linear.quietZoneModules * moduleWidth
 
         val barPaint = Paint().apply {
             color = Color.BLACK
             isAntiAlias = false
         }
         var index = 0
-        while (index < encoding.modules.length) {
-            if (encoding.modules[index] == '1') {
+        while (index < linear.modules.length) {
+            if (linear.modules[index] == '1') {
                 val start = index
-                while (index < encoding.modules.length && encoding.modules[index] == '1') {
+                while (index < linear.modules.length && linear.modules[index] == '1') {
                     index++
                 }
                 val x = left + start * moduleWidth
@@ -248,9 +256,9 @@ class AndroidLabelRenderer : LabelRenderer {
             }
         }
 
-        if (element.showText && encoding.text.isNotEmpty()) {
+        if (element.showText && linear.text.isNotEmpty()) {
             val byHeight = (textHeight * 0.76f).toInt()
-            val byWidth = (rect.width() / encoding.text.length / 0.62f).toInt()
+            val byWidth = (rect.width() / linear.text.length / 0.62f).toInt()
             val fontPx = max(1, min(byHeight, byWidth)).toFloat()
             val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.BLACK
@@ -261,12 +269,47 @@ class AndroidLabelRenderer : LabelRenderer {
             val metrics = paint.fontMetrics
             val baseline = rect.top + barHeight + gap +
                 (textHeight - (metrics.descent - metrics.ascent)) / 2f - metrics.ascent
-            val textWidth = paint.measureText(encoding.text)
+            val textWidth = paint.measureText(linear.text)
             val textX = rect.left + (rect.width() - textWidth) / 2f
             canvas.save()
             canvas.clipRect(rect)
-            canvas.drawText(encoding.text, textX, baseline, paint)
+            canvas.drawText(linear.text, textX, baseline, paint)
             canvas.restore()
+        }
+    }
+
+    private fun drawMatrixBarcode(
+        canvas: Canvas,
+        encoding: MatrixBarcodeEncoding,
+        rect: RectF,
+    ) {
+        val totalWidth = encoding.totalWidthModules
+        val totalHeight = encoding.totalHeightModules
+        val moduleSize = min(rect.width() / totalWidth, rect.height() / totalHeight)
+        val drawnWidth = moduleSize * totalWidth
+        val drawnHeight = moduleSize * totalHeight
+        val left = rect.left + (rect.width() - drawnWidth) / 2f
+        val top = rect.top + (rect.height() - drawnHeight) / 2f
+        val paint = Paint().apply {
+            color = Color.BLACK
+            isAntiAlias = false
+        }
+
+        for (y in 0 until encoding.heightModules) {
+            var x = 0
+            while (x < encoding.widthModules) {
+                if (!encoding.isDark(x, y)) {
+                    x++
+                    continue
+                }
+                val start = x
+                while (x < encoding.widthModules && encoding.isDark(x, y)) x++
+                val startX = left + (encoding.quietZoneModules + start) * moduleSize
+                val endX = max(startX + 1f, left + (encoding.quietZoneModules + x) * moduleSize)
+                val startY = top + (encoding.quietZoneModules + y) * moduleSize
+                val endY = max(startY + 1f, top + (encoding.quietZoneModules + y + 1) * moduleSize)
+                canvas.drawRect(startX, startY, endX, endY, paint)
+            }
         }
     }
 

@@ -1,5 +1,6 @@
 package com.thermling.model
 
+import com.thermling.barcode.BarcodeErrorCorrection
 import com.thermling.barcode.BarcodeFormat
 import com.thermling.protocol.DEFAULT_HEAD_WIDTH_MM
 import com.thermling.protocol.Style
@@ -13,7 +14,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
 
-const val SCHEMA_VERSION = 3
+const val SCHEMA_VERSION = 4
 const val DEFAULT_FONT = "DejaVu Sans"
 const val DEFAULT_FONT_SIZE_PT = 10.0
 
@@ -109,6 +110,7 @@ data class BarcodeElement(
     override val widthMm: Double = 10.0,
     override val heightMm: Double = 12.0,
     val showText: Boolean = true,
+    val errorCorrection: BarcodeErrorCorrection = BarcodeErrorCorrection.MEDIUM,
 ) : LabelElement {
     override val kind: String get() = "barcode"
 
@@ -297,6 +299,7 @@ private data class ElementDto(
     val barcode_value: String? = null,
     val barcode_format: String? = null,
     val show_text: Boolean? = null,
+    val error_correction: String? = null,
 )
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -411,6 +414,7 @@ object DocumentCodec {
             barcode_value = value,
             barcode_format = format.value,
             show_text = showText,
+            error_correction = errorCorrection.value,
         )
     }
 
@@ -456,6 +460,9 @@ object DocumentCodec {
                 widthMm = width,
                 heightMm = height,
                 showText = show_text ?: true,
+                errorCorrection = parseErrorCorrection(
+                    error_correction ?: BarcodeErrorCorrection.MEDIUM.value,
+                ),
             )
             else -> throw DocumentException("Unknown element type: $type")
         }
@@ -491,6 +498,10 @@ object DocumentCodec {
     private fun parseBarcodeFormat(raw: String): BarcodeFormat =
         BarcodeFormat.fromValue(raw)
             ?: throw DocumentException("Unknown barcode format: $raw")
+
+    private fun parseErrorCorrection(raw: String): BarcodeErrorCorrection =
+        BarcodeErrorCorrection.fromValue(raw)
+            ?: throw DocumentException("Unknown barcode error correction: $raw")
 
     private fun clamp(value: Double, low: Double, high: Double): Double = min(high, max(low, value))
 }

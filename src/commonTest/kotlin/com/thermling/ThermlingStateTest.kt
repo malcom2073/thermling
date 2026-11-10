@@ -108,6 +108,36 @@ class ThermlingStateTest {
     }
 
     @Test
+    fun duplicateAndOrientationChangesPreserveQrSettings() {
+        val state = ThermlingState(TestPlatform())
+        val qr = com.thermling.model.BarcodeElement(
+            id = "qr-1",
+            value = "https://example.com",
+            format = com.thermling.barcode.BarcodeFormat.QR,
+            xMm = 1.0,
+            yMm = 1.0,
+            widthMm = 8.0,
+            heightMm = 8.0,
+            showText = false,
+            errorCorrection = com.thermling.barcode.BarcodeErrorCorrection.HIGH,
+        )
+        state.edit("Add QR") { it.add(qr) }
+        state.select(qr.id)
+        state.duplicateSelected()
+
+        val duplicate = state.selectedElement as com.thermling.model.BarcodeElement
+        assertEquals(com.thermling.barcode.BarcodeFormat.QR, duplicate.format)
+        assertEquals(com.thermling.barcode.BarcodeErrorCorrection.HIGH, duplicate.errorCorrection)
+        assertFalse(duplicate.showText)
+
+        state.changeOrientation(com.thermling.model.Orientation.LANDSCAPE)
+        val rotated = state.document.find(duplicate.id) as com.thermling.model.BarcodeElement
+        assertEquals(com.thermling.barcode.BarcodeFormat.QR, rotated.format)
+        assertEquals(com.thermling.barcode.BarcodeErrorCorrection.HIGH, rotated.errorCorrection)
+        assertFalse(rotated.showText)
+    }
+
+    @Test
     fun movingAndResizingAnElementIsOneUndoStep() {
         val state = ThermlingState(TestPlatform())
         state.addText()

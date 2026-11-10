@@ -1,7 +1,9 @@
 package com.thermling.render
 
 import com.thermling.barcode.BarcodeEncoder
+import com.thermling.barcode.BarcodeEncoding
 import com.thermling.barcode.BarcodeException
+import com.thermling.barcode.MatrixBarcodeEncoding
 import com.thermling.model.BarcodeElement
 import com.thermling.model.ImageElement
 import com.thermling.model.ImageFit
@@ -227,10 +229,19 @@ class AwtLabelRenderer : LabelRenderer {
         dpi: Int,
     ) {
         val encoding = try {
-            BarcodeEncoder.encode(element.format, element.value)
+            BarcodeEncoder.encode(element.format, element.value, element.errorCorrection)
         } catch (error: BarcodeException) {
             throw RenderError(error.message ?: "Invalid barcode", error)
         }
+
+        when (encoding) {
+            is MatrixBarcodeEncoding -> {
+                drawMatrixBarcode(graphics, encoding, rect)
+                return
+            }
+            is BarcodeEncoding -> Unit
+        }
+        val linear = encoding as BarcodeEncoding
 
         val textHeight = if (element.showText) {
             min(rect.height * 0.24, 4.0 * dpi / 25.4)
@@ -239,14 +250,14 @@ class AwtLabelRenderer : LabelRenderer {
         }
         val gap = if (element.showText) max(1.0, dpi / 203.0) else 0.0
         val barHeight = max(1.0, rect.height - textHeight - gap)
-        val moduleWidth = rect.width / encoding.totalModules
-        val left = rect.x + encoding.quietZoneModules * moduleWidth
+        val moduleWidth = rect.width / linear.totalModules
+        val left = rect.x + linear.quietZoneModules * moduleWidth
 
         var index = 0
-        while (index < encoding.modules.length) {
-            if (encoding.modules[index] == '1') {
+        while (index < linear.modules.length) {
+            if (linear.modules[index] == '1') {
                 val start = index
-                while (index < encoding.modules.length && encoding.modules[index] == '1') {
+                while (index < linear.modules.length && linear.modules[index] == '1') {
                     index++
                 }
                 val x = (left + start * moduleWidth).roundToInt()
@@ -257,20 +268,55 @@ class AwtLabelRenderer : LabelRenderer {
             }
         }
 
-        if (element.showText && encoding.text.isNotEmpty()) {
+        if (element.showText && linear.text.isNotEmpty()) {
             val byHeight = (textHeight * 0.76).roundToInt()
-            val byWidth = (rect.width / encoding.text.length / 0.62).toInt()
+            val byWidth = (rect.width / linear.text.length / 0.62).toInt()
             val fontPx = max(1, min(byHeight, byWidth))
             graphics.font = Font("Monospaced", Font.PLAIN, fontPx)
             val metrics = graphics.fontMetrics
             val baseline = rect.y + barHeight + gap +
                 (textHeight - metrics.height) / 2.0 + metrics.ascent
-            val textWidth = metrics.stringWidth(encoding.text).toDouble()
+            val textWidth = metrics.stringWidth(linear.text).toDouble()
             val textX = rect.x + (rect.width - textWidth) / 2.0
             val oldClip = graphics.clip
             graphics.clip(rect)
-            graphics.drawString(encoding.text, textX.toFloat(), baseline.toFloat())
+            graphics.drawString(linear.text, textX.toFloat(), baseline.toFloat())
             graphics.clip = oldClip
+        }
+    }
+
+    private fun drawMatrixBarcode(
+        graphics: Graphics2D,
+        encoding: MatrixBarcodeEncoding,
+        rect: Rectangle2D.Double,
+    ) {
+        val totalWidth = encoding.totalWidthModules
+        val totalHeight = encoding.totalHeightModules
+        val moduleSize = min(rect.width / totalWidth, rect.height / totalHeight)
+        val drawnWidth = moduleSize * totalWidth
+        val drawnHeight = moduleSize * totalHeight
+        val left = rect.x + (rect.width - drawnWidth) / 2.0
+        val top = rect.y + (rect.height - drawnHeight) / 2.0
+
+        for (y in 0 until encoding.heightModules) {
+            var x = 0
+            while (x < encoding.widthModules) {
+                if (!encoding.isDark(x, y)) {
+                    x++
+                    continue
+                }
+                val start = x
+                while (x < encoding.widthModules && encoding.isDark(x, y)) x++
+                val startX = (left + (encoding.quietZoneModules + start) * moduleSize).roundToInt()
+                val endX = (left + (encoding.quietZoneModules + x) * moduleSize)
+                    .roundToInt()
+                    .coerceAtLeast(startX + 1)
+                val startY = (top + (encoding.quietZoneModules + y) * moduleSize).roundToInt()
+                val endY = (top + (encoding.quietZoneModules + y + 1) * moduleSize)
+                    .roundToInt()
+                    .coerceAtLeast(startY + 1)
+                graphics.fillRect(startX, startY, endX - startX, endY - startY)
+            }
         }
     }
 

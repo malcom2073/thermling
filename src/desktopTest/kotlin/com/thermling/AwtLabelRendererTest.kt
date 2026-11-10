@@ -195,6 +195,34 @@ class AwtLabelRendererTest {
         }
     }
 
+    @Test
+    fun qrCodeRendersASquareMatrixAndIgnoresHumanReadableText() {
+        val element = BarcodeElement(
+            value = "https://example.com/label",
+            format = BarcodeFormat.QR,
+            xMm = 1.0,
+            yMm = 1.0,
+            widthMm = 10.0,
+            heightMm = 8.0,
+            showText = true,
+        )
+        val document = LabelDocument(elements = listOf(element))
+        val withText = AwtLabelRenderer().render(document, 203, 12.0, 0.0, 0.0)
+        val withoutText = AwtLabelRenderer().render(
+            document.copy(elements = listOf(element.copy(showText = false))),
+            203,
+            12.0,
+            0.0,
+            0.0,
+        )
+
+        assertTrue(withText.data.any { it != 0xFF.toByte() }, "the QR code should print ink")
+        assertTrue(
+            withText.data.contentEquals(withoutText.data),
+            "QR codes should not render human-readable text",
+        )
+    }
+
     private fun firstInkColumn(result: RenderResult): Int {
         val rowBytes = result.rowBytes
         for (x in 0 until result.widthDots) {

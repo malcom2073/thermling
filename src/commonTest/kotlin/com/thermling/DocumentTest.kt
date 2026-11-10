@@ -1,5 +1,6 @@
 package com.thermling
 
+import com.thermling.barcode.BarcodeErrorCorrection
 import com.thermling.barcode.BarcodeFormat
 import com.thermling.model.BarcodeElement
 import com.thermling.model.DocumentCodec
@@ -18,7 +19,7 @@ import kotlin.test.assertTrue
 
 class DocumentTest {
     @Test
-    fun roundTripsSchemaVersionThree() {
+    fun roundTripsSchemaVersionFour() {
         val document = LabelDocument(
             name = "Round trip",
             widthMm = 14.0,
@@ -58,16 +59,29 @@ class DocumentTest {
                     heightMm = 12.0,
                     showText = true,
                 ),
+                BarcodeElement(
+                    id = "barcode-2",
+                    value = "https://example.com/label",
+                    format = BarcodeFormat.QR,
+                    xMm = 1.0,
+                    yMm = 28.0,
+                    widthMm = 10.0,
+                    heightMm = 10.0,
+                    showText = false,
+                    errorCorrection = BarcodeErrorCorrection.HIGH,
+                ),
             ),
         )
 
         val raw = DocumentCodec.encode(document)
-        assertTrue(raw.contains("\"version\": 3"))
+        assertTrue(raw.contains("\"version\": 4"))
         assertTrue(raw.contains("\"orientation\": \"portrait\""))
         assertTrue(raw.contains("\"halftone\": \"auto\""))
         assertTrue(raw.contains("\"thermal_correction\": true"))
         assertTrue(raw.contains("\"type\": \"barcode\""))
         assertTrue(raw.contains("\"barcode_format\": \"code128\""))
+        assertTrue(raw.contains("\"barcode_format\": \"qr\""))
+        assertTrue(raw.contains("\"error_correction\": \"high\""))
 
         val decoded = DocumentCodec.decode(raw)
         assertEquals(document, decoded)
@@ -97,18 +111,39 @@ class DocumentTest {
     @Test
     fun rejectsFutureSchemaAndBadElements() {
         assertFailsWith<DocumentException> {
-            DocumentCodec.decode("""{"version": 4}""")
+            DocumentCodec.decode("""{"version": 5}""")
         }
         assertFailsWith<DocumentException> {
             DocumentCodec.decode(
-                """{"version": 3, "elements": [{"type": "qrcode", "text": "123"}]}""",
+                """{"version": 4, "elements": [{"type": "qrcode", "text": "123"}]}""",
             )
         }
         assertFailsWith<DocumentException> {
             DocumentCodec.decode(
-                """{"version": 3, "elements": [{"type": "barcode", "barcode_format": "pdf417"}]}""",
+                """{"version": 4, "elements": [{"type": "barcode", "barcode_format": "pdf417"}]}""",
             )
         }
+        assertFailsWith<DocumentException> {
+            DocumentCodec.decode(
+                """{"version": 4, "elements": [{"type": "barcode", "barcode_format": "qr", "error_correction": "extreme"}]}""",
+            )
+        }
+    }
+
+    @Test
+    fun legacyBarcodesDefaultToMediumErrorCorrection() {
+        val raw = """
+            {
+              "version": 3,
+              "elements": [
+                {"type": "barcode", "barcode_value": "1234", "barcode_format": "code128"}
+              ]
+            }
+        """.trimIndent()
+
+        val element = DocumentCodec.decode(raw).elements.single() as BarcodeElement
+        assertEquals(BarcodeErrorCorrection.MEDIUM, element.errorCorrection)
+        assertTrue(element.showText)
     }
 
     @Test

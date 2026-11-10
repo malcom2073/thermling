@@ -42,6 +42,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.thermling.app.ThermlingState
 import com.thermling.barcode.BarcodeEncoder
+import com.thermling.barcode.BarcodeEncoding
+import com.thermling.barcode.MatrixBarcodeEncoding
 import com.thermling.model.BarcodeElement
 import com.thermling.model.HorizontalAlign
 import com.thermling.model.ImageElement
@@ -300,8 +302,10 @@ private fun TextElementView(element: TextElement, scale: Float) {
 @Composable
 private fun BarcodeElementView(element: BarcodeElement, scale: Float) {
     val density = LocalDensity.current
-    val encoding = remember(element.format, element.value) {
-        runCatching { BarcodeEncoder.encode(element.format, element.value) }.getOrNull()
+    val encoding = remember(element.format, element.value, element.errorCorrection) {
+        runCatching {
+            BarcodeEncoder.encode(element.format, element.value, element.errorCorrection)
+        }.getOrNull()
     }
     if (encoding == null) {
         Box(Modifier.fillMaxSize().background(Color(0x22B3261E))) {
@@ -315,19 +319,51 @@ private fun BarcodeElementView(element: BarcodeElement, scale: Float) {
         return
     }
 
+    if (encoding is MatrixBarcodeEncoding) {
+        Canvas(Modifier.fillMaxSize()) {
+            val moduleSize = min(
+                size.width / encoding.totalWidthModules,
+                size.height / encoding.totalHeightModules,
+            )
+            val left = (size.width - moduleSize * encoding.totalWidthModules) / 2f
+            val top = (size.height - moduleSize * encoding.totalHeightModules) / 2f
+            for (y in 0 until encoding.heightModules) {
+                var x = 0
+                while (x < encoding.widthModules) {
+                    if (!encoding.isDark(x, y)) {
+                        x++
+                        continue
+                    }
+                    val start = x
+                    while (x < encoding.widthModules && encoding.isDark(x, y)) x++
+                    drawRect(
+                        color = Color.Black,
+                        topLeft = Offset(
+                            left + (encoding.quietZoneModules + start) * moduleSize,
+                            top + (encoding.quietZoneModules + y) * moduleSize,
+                        ),
+                        size = Size((x - start) * moduleSize, moduleSize),
+                    )
+                }
+            }
+        }
+        return
+    }
+
+    val linear = encoding as BarcodeEncoding
     Column(Modifier.fillMaxSize()) {
         Canvas(
             Modifier
                 .fillMaxWidth()
                 .weight(if (element.showText) 0.78f else 1f),
         ) {
-            val moduleWidth = size.width / encoding.totalModules
-            val left = encoding.quietZoneModules * moduleWidth
+            val moduleWidth = size.width / linear.totalModules
+            val left = linear.quietZoneModules * moduleWidth
             var index = 0
-            while (index < encoding.modules.length) {
-                if (encoding.modules[index] == '1') {
+            while (index < linear.modules.length) {
+                if (linear.modules[index] == '1') {
                     val start = index
-                    while (index < encoding.modules.length && encoding.modules[index] == '1') {
+                    while (index < linear.modules.length && linear.modules[index] == '1') {
                         index++
                     }
                     drawRect(
@@ -349,7 +385,7 @@ private fun BarcodeElementView(element: BarcodeElement, scale: Float) {
                     (element.heightMm * scale * 0.16f).toFloat().coerceAtLeast(4f).toSp()
                 }
                 Text(
-                    text = encoding.text,
+                    text = linear.text,
                     color = Color.Black,
                     fontSize = fontSize,
                     maxLines = 1,

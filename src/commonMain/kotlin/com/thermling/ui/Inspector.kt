@@ -23,8 +23,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.thermling.app.ThermlingState
+import com.thermling.barcode.BarcodeDimension
 import com.thermling.barcode.BarcodeEncoder
+import com.thermling.barcode.BarcodeEncoding
+import com.thermling.barcode.BarcodeErrorCorrection
 import com.thermling.barcode.BarcodeFormat
+import com.thermling.barcode.MatrixBarcodeEncoding
 import com.thermling.model.BarcodeElement
 import com.thermling.model.Halftone
 import com.thermling.model.HorizontalAlign
@@ -38,6 +42,7 @@ import com.thermling.model.VerticalAlign
 import com.thermling.protocol.Style
 import com.thermling.protocol.formatNumber
 import kotlinx.coroutines.launch
+import kotlin.math.min
 
 @Composable
 fun InspectorPanel(state: ThermlingState, modifier: Modifier = Modifier) {
@@ -463,9 +468,12 @@ private fun ImageElementFields(state: ThermlingState, element: ImageElement) {
 private fun BarcodeElementFields(state: ThermlingState, element: BarcodeElement) {
     val palette = LocalThermlingPalette.current
     val id = element.id
-    val result = remember(element.format, element.value) {
-        runCatching { BarcodeEncoder.encode(element.format, element.value) }
+    val result = remember(element.format, element.value, element.errorCorrection) {
+        runCatching {
+            BarcodeEncoder.encode(element.format, element.value, element.errorCorrection)
+        }
     }
+    val isMatrix = element.format.dimension == BarcodeDimension.MATRIX
 
     TextFieldCompact(
         value = element.value,
@@ -483,13 +491,32 @@ private fun BarcodeElementFields(state: ThermlingState, element: BarcodeElement)
         labelOf = { it.label },
         onSelect = { format ->
             updateElement(state, id, "Change barcode format") { current ->
-                (current as BarcodeElement).copy(format = format)
+                val barcode = current as BarcodeElement
+                barcode.copy(
+                    format = format,
+                    showText = if (format.dimension == BarcodeDimension.MATRIX) false else
+                        barcode.showText,
+                )
             }
         },
     )
-    CheckboxLabel("Show human-readable text", element.showText) { checked ->
-        updateElement(state, id, "Change barcode text") { current ->
-            (current as BarcodeElement).copy(showText = checked)
+    if (isMatrix) {
+        DropdownField(
+            label = "Error correction",
+            value = element.errorCorrection,
+            options = BarcodeErrorCorrection.entries,
+            labelOf = { it.label },
+            onSelect = { errorCorrection ->
+                updateElement(state, id, "Change error correction") { current ->
+                    (current as BarcodeElement).copy(errorCorrection = errorCorrection)
+                }
+            },
+        )
+    } else {
+        CheckboxLabel("Show human-readable text", element.showText) { checked ->
+            updateElement(state, id, "Change barcode text") { current ->
+                (current as BarcodeElement).copy(showText = checked)
+            }
         }
     }
 
@@ -502,21 +529,30 @@ private fun BarcodeElementFields(state: ThermlingState, element: BarcodeElement)
         )
     } else {
         val encoding = result.getOrThrow()
-        val moduleDots = element.widthMm * state.effectiveDpi / 25.4 / encoding.totalModules
+        val moduleDots = if (encoding is MatrixBarcodeEncoding) {
+            min(element.widthMm, element.heightMm) * state.effectiveDpi / 25.4 /
+                encoding.totalWidthModules
+        } else {
+            element.widthMm * state.effectiveDpi / 25.4 / encoding.totalWidthModules
+        }
         if (moduleDots < 1.0) {
             Text(
-                "At this width there is less than one printer dot per module. " +
-                    "Widen the element or shorten the data for a scannable barcode.",
+                "At this size there is less than one printer dot per module. " +
+                    "Enlarge the element or shorten the data for a scannable barcode.",
                 color = palette.warning,
                 fontSize = 10.sp,
             )
         } else {
-            Text(
-                "${encoding.totalModules} modules incl. quiet zones. " +
-                    "Bars scale to the element's width and height.",
-                color = palette.muted,
-                fontSize = 10.sp,
-            )
+            val details = when (encoding) {
+                is MatrixBarcodeEncoding ->
+                    "${encoding.widthModules} × ${encoding.heightModules} modules, " +
+                        "${encoding.quietZoneModules}-module quiet zone. " +
+                        "The symbol stays square and fits inside the element."
+                is BarcodeEncoding ->
+                    "${encoding.totalModules} modules incl. quiet zones. " +
+                        "Bars scale to the element's width and height."
+            }
+            Text(details, color = palette.muted, fontSize = 10.sp)
         }
     }
 }

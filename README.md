@@ -23,12 +23,14 @@ Linux desktop app and as an Android app.
 - 14 × 40 mm P21 stock by default, with the 12 mm print-head width cap.
 - Vertical and horizontal page layouts; horizontal labels are rotated into the
   printer's fixed head orientation and rotated back for the preview.
-- Text and embedded PNG images, drag-to-move, resize handle, alignment, styling,
-  and line spacing.
+- Text, embedded PNG images, and barcodes with drag-to-move, resize handle,
+  alignment, styling, and line spacing.
+- Linear barcodes (Code 128, Code 39, EAN-13, EAN-8, UPC-A) and QR Codes with
+  selectable error correction, rendered as scalable label elements.
 - Presets, manual dimensions, paper style, halftone mode, thermal correction,
   print density, copies, and printer-reported DPI.
 - Undo/redo with one history entry per drag/resize gesture.
-- Schema-v2 document save/open; schema-v1 documents load with defaults.
+- Schema-v4 document save/open; older documents load with defaults.
 - Printer status, configuration, battery, label-roll tag, and self-test queries.
 - Print flow with a FIFO print queue in the shared client layer.
 - Demo printer backend for trying the full UI and print flow without hardware.
@@ -192,7 +194,7 @@ socket when a MAC address is supplied:
 ```text
 src/commonMain/kotlin/com/thermling/
   app/         document editing, undo/redo, connection and print state
-  model/       schema-v2 model and codec
+  model/       schema-v4 model and codec
   platform/    platform interface, transport metadata, Bluetooth device sorting
   protocol/    TSPL commands, replies, CRC, geometry, job builder
   render/      renderer interface, shared monochrome pixel math, preview result
