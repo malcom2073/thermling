@@ -14,7 +14,7 @@ plugins {
 }
 
 group = "com.thermling"
-version = "0.1.0"
+version = "0.3.0"
 
 kotlin {
     jvm("desktop") {
@@ -107,6 +107,19 @@ android {
         }
     }
 
+    // AGP's new VariantOutput API does not expose outputFileName yet, so use
+    // the legacy variant API to include the version in the APK filename.
+    applicationVariants.configureEach {
+        val variant = this
+        val variantVersion = variant.versionName ?: project.version.toString()
+        val unsignedSuffix =
+            if (variant.name == "release" && releaseSigningProperties.getProperty("storeFile") == null) "-unsigned" else ""
+        for (output in variant.outputs) {
+            val outputImpl = output as com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            outputImpl.outputFileName = "thermling-$variantVersion-${variant.name}$unsignedSuffix.apk"
+        }
+    }
+
     sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
     sourceSets["main"].res.srcDirs("src/androidMain/res")
 
@@ -126,7 +139,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.AppImage)
             packageName = "Thermling"
-            packageVersion = "0.1.0"
+            packageVersion = project.version.toString()
             description = "Label composer for Nelko P21/P22 thermal printers"
             vendor = "Thermling"
             linux {

@@ -110,7 +110,7 @@ Then build and install the debug APK:
 ```bash
 export ANDROID_HOME=/path/to/android-sdk
 JAVA_HOME=/path/to/jdk-17 ./gradlew assembleDebug
-adb install -r build/outputs/apk/debug/thermling-debug.apk
+adb install -r build/outputs/apk/debug/thermling-0.3.0-debug.apk
 ```
 
 Release builds are signed only when a local signing config is present. Create
