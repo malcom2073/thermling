@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -65,6 +66,7 @@ fun InspectorPanel(state: ThermlingState, modifier: Modifier = Modifier) {
 private fun DocumentSection(state: ThermlingState) {
     val palette = LocalThermlingPalette.current
     val document = state.document
+    val scope = rememberCoroutineScope()
     SectionCard("Document") {
         TextFieldCompact(
             value = document.name,
@@ -191,6 +193,54 @@ private fun DocumentSection(state: ThermlingState) {
                 state.updateSettings { it.copy(headWidthMm = value.coerceIn(1.0, 200.0)) }
             },
             label = "Print head width",
+        )
+        InlineDivider()
+        Text("Calibration offset", color = palette.text, fontSize = 11.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            NumberField(
+                value = settings.offsetXMm,
+                onValueChange = { value ->
+                    state.updateSettings { it.copy(offsetXMm = value.coerceIn(-10.0, 10.0)) }
+                },
+                label = "X",
+                suffix = "mm",
+                decimals = 2,
+                modifier = Modifier.weight(1f),
+            )
+            NumberField(
+                value = settings.offsetYMm,
+                onValueChange = { value ->
+                    state.updateSettings { it.copy(offsetYMm = value.coerceIn(-10.0, 10.0)) }
+                },
+                label = "Y",
+                suffix = "mm",
+                decimals = 2,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Text(
+            "Positive X moves right across the head; positive Y moves down the feed. " +
+                "The head is only 12 mm wide, so a right shift trades away the same width on the right.",
+            color = palette.muted,
+            fontSize = 10.sp,
+        )
+        InlineDivider()
+        OutlinedButton(
+            onClick = { scope.launch { state.printCalibrationPattern() } },
+            enabled = state.isConnected && !state.busy,
+            modifier = Modifier.fillMaxWidth().testTag("print-calibration"),
+        ) {
+            Text("Print calibration pattern", fontSize = 12.sp)
+        }
+        Text(
+            if (state.isConnected) {
+                "Prints edge marks and a 1.5 mm-inset frame with a 1 mm ruler, so you can " +
+                    "measure where the printable band sits and verify the offset."
+            } else {
+                "Connect to a printer to print a calibration pattern."
+            },
+            color = palette.muted,
+            fontSize = 10.sp,
         )
     }
 }

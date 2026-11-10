@@ -32,6 +32,32 @@ data class PackedMonochrome(
 }
 
 /**
+ * Shifts a packed, printer-space bitmap by whole dots.
+ *
+ * Positive [dx] moves the image right (towards higher head dot numbers) and
+ * positive [dy] moves it down the feed. The vacated edge is filled with white
+ * and anything pushed past the opposite edge is clipped, matching what the
+ * print head can physically reach.
+ */
+fun PackedMonochrome.shifted(dx: Int, dy: Int): PackedMonochrome {
+    if (dx == 0 && dy == 0) return this
+    val result = ByteArray(data.size) { 0xFF.toByte() }
+    for (y in 0 until height) {
+        val sourceY = y - dy
+        if (sourceY !in 0 until height) continue
+        for (x in 0 until width) {
+            val sourceX = x - dx
+            if (sourceX !in 0 until width) continue
+            if (!isSet(sourceX, sourceY)) {
+                val index = y * rowBytes + (x shr 3)
+                result[index] = (result[index].toInt() and (1 shl (7 - (x and 7))).inv()).toByte()
+            }
+        }
+    }
+    return PackedMonochrome(width, height, result)
+}
+
+/**
  * Rotates ARGB pixels by exact quarter turns. This matches the pixel mapping
  * used by the desktop renderer so even-sized images do not gain a half-pixel
  * white edge when a landscape label is turned into the print-head orientation.

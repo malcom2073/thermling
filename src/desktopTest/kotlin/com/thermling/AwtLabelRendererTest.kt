@@ -7,6 +7,7 @@ import com.thermling.model.LabelDocument
 import com.thermling.model.Orientation
 import com.thermling.model.TextElement
 import com.thermling.render.AwtLabelRenderer
+import com.thermling.render.RenderResult
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import java.util.Base64
@@ -24,7 +25,7 @@ class AwtLabelRendererTest {
 
     @Test
     fun blankPortraitLabelIsAllWhiteAndFitsTheHead() {
-        val result = AwtLabelRenderer().render(LabelDocument(), 203, 12.0)
+        val result = AwtLabelRenderer().render(LabelDocument(), 203, 12.0, 0.0, 0.0)
         assertEquals(96, result.widthDots)
         assertEquals(320, result.heightDots)
         assertEquals(12, result.rowBytes)
@@ -50,7 +51,7 @@ class AwtLabelRendererTest {
                 ),
             ),
         )
-        val result = AwtLabelRenderer().render(document, 203, 12.0)
+        val result = AwtLabelRenderer().render(document, 203, 12.0, 0.0, 0.0)
         assertTrue(result.data.any { it != 0xFF.toByte() })
     }
 
@@ -71,7 +72,7 @@ class AwtLabelRendererTest {
                 ),
             ),
         )
-        val result = AwtLabelRenderer().render(document, 203, 12.0)
+        val result = AwtLabelRenderer().render(document, 203, 12.0, 0.0, 0.0)
         assertEquals(96, result.widthDots)
         assertEquals(320, result.heightDots)
         assertEquals(320, result.preview.width)
@@ -99,7 +100,7 @@ class AwtLabelRendererTest {
             ),
         )
 
-        val result = AwtLabelRenderer().render(document, 203, 12.0)
+        val result = AwtLabelRenderer().render(document, 203, 12.0, 0.0, 0.0)
         val rowBytes = result.rowBytes
         val blackRows = (0 until result.heightDots).filter { row ->
             val offset = row * rowBytes
@@ -120,7 +121,7 @@ class AwtLabelRendererTest {
 
     @Test
     fun widerLabelsAreClippedToThePrintHead() {
-        val result = AwtLabelRenderer().render(LabelDocument(widthMm = 40.0), 203, 12.0)
+        val result = AwtLabelRenderer().render(LabelDocument(widthMm = 40.0), 203, 12.0, 0.0, 0.0)
         assertEquals(12.0, result.printableWidthMm)
         assertEquals(96, result.widthDots)
     }
@@ -128,9 +129,46 @@ class AwtLabelRendererTest {
     @Test
     fun explicitFloydSteinbergIsReported() {
         val document = LabelDocument(halftone = Halftone.FLOYD)
-        val result = AwtLabelRenderer().render(document, 203, 12.0)
+        val result = AwtLabelRenderer().render(document, 203, 12.0, 0.0, 0.0)
         assertEquals("floyd", result.halftone)
         assertTrue(result.data.all { it == 0xFF.toByte() })
+    }
+
+    @Test
+    fun calibrationOffsetShiftsThePrintedRasterByWholeDots() {
+        val document = LabelDocument(
+            elements = listOf(
+                TextElement(
+                    text = "|",
+                    xMm = 1.0,
+                    yMm = 1.0,
+                    widthMm = 1.0,
+                    heightMm = 8.0,
+                    fontSizePt = 16.0,
+                    bold = true,
+                ),
+            ),
+        )
+
+        val plain = AwtLabelRenderer().render(document, 203, 12.0, 0.0, 0.0)
+        val shifted = AwtLabelRenderer().render(document, 203, 12.0, 1.0, 0.0)
+
+        val plainFirst = firstInkColumn(plain)
+        val shiftedFirst = firstInkColumn(shifted)
+        assertTrue(plainFirst >= 0, "the test element should produce ink")
+        assertEquals(8, shiftedFirst - plainFirst, "1 mm at 203 DPI is 8 dots")
+    }
+
+    private fun firstInkColumn(result: RenderResult): Int {
+        val rowBytes = result.rowBytes
+        for (x in 0 until result.widthDots) {
+            val mask = 1 shl (7 - (x % 8))
+            for (y in 0 until result.heightDots) {
+                val value = result.data[y * rowBytes + (x shr 3)].toInt()
+                if (value and mask == 0) return x
+            }
+        }
+        return -1
     }
 
     private fun blackPixelPng(): String {

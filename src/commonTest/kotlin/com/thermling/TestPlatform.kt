@@ -29,7 +29,13 @@ expect class TestPlatform : Platform {
     // Platform methods are implemented in the actual declaration, which may
     // differ per platform (e.g., the desktop renderer produces ImageBitmap vs.
     // a minimal stub on Android JVM).
-    override fun render(document: LabelDocument, dpi: Int, headWidthMm: Double): RenderResult
+    override fun render(
+        document: LabelDocument,
+        dpi: Int,
+        headWidthMm: Double,
+        offsetXMm: Double,
+        offsetYMm: Double,
+    ): RenderResult
     override fun decodeImage(base64: String): ImageBitmap?
     override suspend fun chooseImage(): PickedImage?
     override suspend fun openDocumentDialog(): String?

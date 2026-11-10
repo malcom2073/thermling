@@ -48,6 +48,23 @@ class ThermlingStateTest {
     }
 
     @Test
+    fun printsCalibrationPatternUsingTheCurrentStock() = runTest {
+        val platform = TestPlatform()
+        val state = ThermlingState(platform)
+        state.connectPrinter()
+
+        assertTrue(state.printCalibrationPattern())
+
+        val printed = platform.transport.printedPayloads.single()
+        val text = printed.decodeToString()
+        assertTrue(text.startsWith("\r\nSIZE 14 mm,40 mm\r\n"))
+        assertTrue(text.contains("BITMAP 0,0,12,320,1,"))
+        assertTrue(text.endsWith("\r\nPRINT 1\r\n"))
+        // Header + 96 x 320 dots (12 bytes x 320 rows) + footer.
+        assertTrue(printed.size >= 12 * 320)
+    }
+
+    @Test
     fun undoRedoAndNewDocumentTrackDirtyState() {
         val state = ThermlingState(TestPlatform())
         assertFalse(state.canUndo)

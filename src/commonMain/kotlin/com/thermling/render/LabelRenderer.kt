@@ -19,5 +19,11 @@ data class RenderResult(
 }
 
 fun interface LabelRenderer {
-    fun render(document: LabelDocument, dpi: Int, headWidthMm: Double): RenderResult
+    fun render(
+        document: LabelDocument,
+        dpi: Int,
+        headWidthMm: Double,
+        offsetXMm: Double,
+        offsetYMm: Double,
+    ): RenderResult
 }

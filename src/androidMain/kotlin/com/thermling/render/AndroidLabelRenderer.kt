@@ -29,7 +29,13 @@ import kotlin.math.roundToInt
  * rotation code, so the print bitmap is identical to the desktop renderer.
  */
 class AndroidLabelRenderer : LabelRenderer {
-    override fun render(document: LabelDocument, dpi: Int, headWidthMm: Double): RenderResult {
+    override fun render(
+        document: LabelDocument,
+        dpi: Int,
+        headWidthMm: Double,
+        offsetXMm: Double,
+        offsetYMm: Double,
+    ): RenderResult {
         document.validate()
         if (dpi !in 50..1200) throw RenderError("Unsupported DPI: $dpi")
 
@@ -79,6 +85,9 @@ class AndroidLabelRenderer : LabelRenderer {
             printer.height,
             effectiveHalftone(document),
             document.thermalCorrection,
+        ).shifted(
+            dx = mmToDots(offsetXMm, dpi).roundToInt(),
+            dy = mmToDots(offsetYMm, dpi).roundToInt(),
         )
         val preview = if (landscape) {
             rotateQuarterTurns(packed.toArgb(), packed.width, packed.height, 1)

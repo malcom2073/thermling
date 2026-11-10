@@ -29,6 +29,9 @@ data class AppSettings(
     val dpi: Int = 203,
     val autoDpi: Boolean = true,
     val headWidthMm: Double = 12.0,
+    /** Printer-space calibration, in mm. Positive X moves the image right; positive Y moves it down the feed. */
+    val offsetXMm: Double = 0.0,
+    val offsetYMm: Double = 0.0,
     val lastDirectory: String = "",
 )
 
@@ -48,7 +51,13 @@ data class BluetoothDeviceInfo(
 }
 
 interface Platform {
-    fun render(document: LabelDocument, dpi: Int, headWidthMm: Double): RenderResult
+    fun render(
+        document: LabelDocument,
+        dpi: Int,
+        headWidthMm: Double,
+        offsetXMm: Double = 0.0,
+        offsetYMm: Double = 0.0,
+    ): RenderResult
     fun decodeImage(base64: String): ImageBitmap?
     suspend fun chooseImage(): PickedImage?
     suspend fun openDocumentDialog(): String?

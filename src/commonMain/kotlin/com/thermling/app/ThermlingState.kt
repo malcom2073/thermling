@@ -21,13 +21,19 @@ import com.thermling.protocol.Config
 import com.thermling.protocol.LabelRoll
 import com.thermling.protocol.PrinterClient
 import com.thermling.protocol.PrinterNotReadyException
+import com.thermling.protocol.bitmapWidthDots
 import com.thermling.protocol.buildJob
 import com.thermling.protocol.describeStatus
+import com.thermling.protocol.mmToDots
+import com.thermling.protocol.printableWidthMm
 import com.thermling.render.RenderResult
+import com.thermling.render.calibrationPattern
+import com.thermling.render.shifted
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 enum class ConnectionState { DISCONNECTED, CONNECTING, CONNECTED, ERROR }
 
@@ -340,8 +346,12 @@ class ThermlingState(val platform: Platform) {
         val current = document
         val dpi = effectiveDpi
         val head = settings.headWidthMm
+        val offsetX = settings.offsetXMm
+        val offsetY = settings.offsetYMm
         try {
-            val result = withContext(Dispatchers.Default) { platform.render(current, dpi, head) }
+            val result = withContext(Dispatchers.Default) {
+                platform.render(current, dpi, head, offsetX, offsetY)
+            }
             if (current == document) {
                 preview = result
                 renderError = null
@@ -543,6 +553,50 @@ class ThermlingState(val platform: Platform) {
             false
         } catch (error: Exception) {
             statusMessage = "Print failed: ${error.message}"
+            false
+        } finally {
+            busy = false
+        }
+    }
+
+    suspend fun printCalibrationPattern(): Boolean {
+        if (busy) return false
+        val active = client ?: run {
+            statusMessage = "Connect to a printer first"
+            return false
+        }
+        val dpi = effectiveDpi
+        val printable = printableWidthMm(document.widthMm, settings.headWidthMm)
+        val widthDots = bitmapWidthDots(printable, dpi)
+        val heightDots = max(1, mmToDots(document.lengthMm, dpi).roundToInt())
+        val dx = mmToDots(settings.offsetXMm, dpi).roundToInt()
+        val dy = mmToDots(settings.offsetYMm, dpi).roundToInt()
+        val pattern = withContext(Dispatchers.Default) {
+            calibrationPattern(widthDots, heightDots, dpi).shifted(dx, dy)
+        }
+        busy = true
+        return try {
+            val payload = buildJob(
+                labelWidthMm = document.widthMm,
+                labelLengthMm = document.lengthMm,
+                gapMm = document.gapMm,
+                style = document.style,
+                bitmap = pattern.data,
+                widthDots = widthDots,
+                heightDots = heightDots,
+                density = settings.density,
+                copies = 1,
+            )
+            statusMessage = "Sending calibration pattern…"
+            val message = active.printJob(payload)
+            statusMessage = "$message (calibration $widthDots × $heightDots dots, $printable mm wide)"
+            refreshPrinter()
+            true
+        } catch (error: PrinterNotReadyException) {
+            statusMessage = error.message ?: "Printer not ready"
+            false
+        } catch (error: Exception) {
+            statusMessage = "Calibration print failed: ${error.message}"
             false
         } finally {
             busy = false

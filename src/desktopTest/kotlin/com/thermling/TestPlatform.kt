@@ -34,7 +34,13 @@ actual class TestPlatform : Platform {
 
     actual constructor()
 
-    actual override fun render(document: LabelDocument, dpi: Int, headWidthMm: Double): RenderResult {
+    actual override fun render(
+        document: LabelDocument,
+        dpi: Int,
+        headWidthMm: Double,
+        offsetXMm: Double,
+        offsetYMm: Double,
+    ): RenderResult {
         val printable = printableWidthMm(document.widthMm, headWidthMm)
         val widthDots = bitmapWidthDots(printable, dpi)
         val heightDots = max(1, mmToDots(document.lengthMm, dpi).roundToInt())

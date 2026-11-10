@@ -40,6 +40,8 @@ actual class TestPlatform : Platform {
         document: LabelDocument,
         dpi: Int,
         headWidthMm: Double,
+        offsetXMm: Double,
+        offsetYMm: Double,
     ): RenderResult {
         val printable = printableWidthMm(document.widthMm, headWidthMm)
         val widthDots = bitmapWidthDots(printable, dpi)

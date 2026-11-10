@@ -24,7 +24,13 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 class AwtLabelRenderer : LabelRenderer {
-    override fun render(document: LabelDocument, dpi: Int, headWidthMm: Double): RenderResult {
+    override fun render(
+        document: LabelDocument,
+        dpi: Int,
+        headWidthMm: Double,
+        offsetXMm: Double,
+        offsetYMm: Double,
+    ): RenderResult {
         document.validate()
         if (dpi !in 50..1200) throw RenderError("Unsupported DPI: $dpi")
 
@@ -75,6 +81,9 @@ class AwtLabelRenderer : LabelRenderer {
             printerPixels.height,
             halftone,
             document.thermalCorrection,
+        ).shifted(
+            dx = mmToDots(offsetXMm, dpi).roundToInt(),
+            dy = mmToDots(offsetYMm, dpi).roundToInt(),
         )
         val previewPixels = if (landscape) {
             rotateQuarterTurns(packed.toArgb(), packed.width, packed.height, 1)

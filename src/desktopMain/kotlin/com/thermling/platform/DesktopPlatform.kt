@@ -30,8 +30,13 @@ class DesktopPlatform : Platform {
     private val bluetoothScanner = BluezBluetoothScanner()
     private val preferences = Preferences.userRoot().node("com/thermling/desktop")
 
-    override fun render(document: LabelDocument, dpi: Int, headWidthMm: Double): RenderResult =
-        renderer.render(document, dpi, headWidthMm)
+    override fun render(
+        document: LabelDocument,
+        dpi: Int,
+        headWidthMm: Double,
+        offsetXMm: Double,
+        offsetYMm: Double,
+    ): RenderResult = renderer.render(document, dpi, headWidthMm, offsetXMm, offsetYMm)
 
     override fun decodeImage(base64: String): ImageBitmap? {
         if (base64.isEmpty()) return null
@@ -124,6 +129,8 @@ class DesktopPlatform : Platform {
             dpi = preferences.getInt("dpi", 203).coerceIn(50, 1200),
             autoDpi = preferences.getBoolean("autoDpi", true),
             headWidthMm = preferences.getDouble("headWidthMm", 12.0).coerceIn(1.0, 200.0),
+            offsetXMm = preferences.getDouble("offsetXMm", 0.0).coerceIn(-10.0, 10.0),
+            offsetYMm = preferences.getDouble("offsetYMm", 0.0).coerceIn(-10.0, 10.0),
             lastDirectory = preferences.get("lastDirectory", ""),
         )
     }
@@ -137,6 +144,8 @@ class DesktopPlatform : Platform {
         preferences.putInt("dpi", settings.dpi)
         preferences.putBoolean("autoDpi", settings.autoDpi)
         preferences.putDouble("headWidthMm", settings.headWidthMm)
+        preferences.putDouble("offsetXMm", settings.offsetXMm)
+        preferences.putDouble("offsetYMm", settings.offsetYMm)
         preferences.put("lastDirectory", settings.lastDirectory)
     }
 

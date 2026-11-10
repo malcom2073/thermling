@@ -34,8 +34,13 @@ class AndroidPlatform(
     private val scanner = AndroidBluetoothScanner(context)
     private val preferences = context.getSharedPreferences("thermling", Context.MODE_PRIVATE)
 
-    override fun render(document: LabelDocument, dpi: Int, headWidthMm: Double): RenderResult =
-        renderer.render(document, dpi, headWidthMm)
+    override fun render(
+        document: LabelDocument,
+        dpi: Int,
+        headWidthMm: Double,
+        offsetXMm: Double,
+        offsetYMm: Double,
+    ): RenderResult = renderer.render(document, dpi, headWidthMm, offsetXMm, offsetYMm)
 
     override fun decodeImage(base64: String): ImageBitmap? {
         if (base64.isEmpty()) return null
@@ -124,6 +129,14 @@ class AndroidPlatform(
                 ?.toDoubleOrNull()
                 ?.coerceIn(1.0, 200.0)
                 ?: 12.0,
+            offsetXMm = preferences.getString(KEY_OFFSET_X, null)
+                ?.toDoubleOrNull()
+                ?.coerceIn(-10.0, 10.0)
+                ?: 0.0,
+            offsetYMm = preferences.getString(KEY_OFFSET_Y, null)
+                ?.toDoubleOrNull()
+                ?.coerceIn(-10.0, 10.0)
+                ?: 0.0,
             lastDirectory = preferences.getString(KEY_LAST_DIRECTORY, "").orEmpty(),
         )
     }
@@ -138,6 +151,8 @@ class AndroidPlatform(
             .putInt(KEY_DPI, settings.dpi)
             .putBoolean(KEY_AUTO_DPI, settings.autoDpi)
             .putString(KEY_HEAD_WIDTH, settings.headWidthMm.toString())
+            .putString(KEY_OFFSET_X, settings.offsetXMm.toString())
+            .putString(KEY_OFFSET_Y, settings.offsetYMm.toString())
             .putString(KEY_LAST_DIRECTORY, settings.lastDirectory)
             .apply()
     }
@@ -266,6 +281,8 @@ class AndroidPlatform(
         const val KEY_DPI = "dpi"
         const val KEY_AUTO_DPI = "autoDpi"
         const val KEY_HEAD_WIDTH = "headWidthMm"
+        const val KEY_OFFSET_X = "offsetXMm"
+        const val KEY_OFFSET_Y = "offsetYMm"
         const val KEY_LAST_DIRECTORY = "lastDirectory"
     }
 }
