@@ -33,6 +33,7 @@ actual class TestPlatform : Platform {
     actual var failWrites = false
     actual var scanResults: List<BluetoothDeviceInfo> = emptyList()
     actual var failScan = false
+    actual var imageToPick: PickedImage? = null
 
     actual constructor()
 
@@ -60,7 +61,7 @@ actual class TestPlatform : Platform {
 
     actual override fun decodeImage(base64: String): ImageBitmap? = null
 
-    actual override suspend fun chooseImage(): PickedImage? = null
+    actual override suspend fun chooseImage(): PickedImage? = imageToPick
 
     actual override suspend fun openDocumentDialog(): String? = openPath
 

@@ -11,6 +11,8 @@ import com.thermling.transport.RfcommSocketTransport
 import com.thermling.transport.SerialTransport
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.awt.FileDialog
 import java.awt.Frame
 import java.awt.image.BufferedImage
@@ -22,6 +24,7 @@ import java.nio.file.Path
 import java.util.Base64
 import java.util.prefs.Preferences
 import javax.imageio.ImageIO
+import javax.swing.SwingUtilities
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -49,6 +52,10 @@ class DesktopPlatform : Platform {
 
     override suspend fun chooseImage(): PickedImage? {
         val path = chooseFile("Choose image", FileDialog.LOAD, imageFilter) ?: return null
+        return withContext(Dispatchers.IO) { readPickedImage(path) }
+    }
+
+    private fun readPickedImage(path: String): PickedImage {
         val file = File(path)
         val source = ImageIO.read(file) ?: throw IllegalArgumentException("Unsupported image format")
         var image = source
@@ -67,7 +74,6 @@ class DesktopPlatform : Platform {
         if (!ImageIO.write(image, "png", output)) {
             throw IllegalArgumentException("Could not encode the image as PNG")
         }
-        preferences.put("lastDirectory", file.parent ?: "")
         return PickedImage(
             path = file.absolutePath,
             name = file.name,
@@ -153,23 +159,43 @@ class DesktopPlatform : Platform {
         preferences.put("lastDirectory", path)
     }
 
-    private fun chooseFile(
+    private suspend fun chooseFile(
         title: String,
         mode: Int,
         filter: java.io.FilenameFilter,
         suggested: String? = null,
     ): String? {
-        val dialog = FileDialog(null as Frame?, title, mode)
-        dialog.filenameFilter = filter
-        val last = preferences.get("lastDirectory", "")
-        if (last.isNotBlank() && File(last).isDirectory) dialog.directory = last
-        if (suggested != null) dialog.file = suggested
-        dialog.isVisible = true
-        val file = dialog.file ?: return null
-        val directory = dialog.directory ?: return null
-        val result = File(directory, file)
-        preferences.put("lastDirectory", result.parent ?: directory)
-        return result.absolutePath
+        // FileDialog.show() pumps a nested AWT event loop. Opening it directly from Compose's
+        // UI dispatcher (which runs inside a pointer event) re-enters the frame clock and
+        // corrupts the coroutine machinery, so the dialog is shown on the AWT event thread
+        // while this coroutine waits on a worker thread.
+        val selected = withContext(Dispatchers.IO) {
+            onEventThread {
+                val dialog = FileDialog(null as Frame?, title, mode)
+                try {
+                    dialog.filenameFilter = filter
+                    val last = preferences.get("lastDirectory", "")
+                    if (last.isNotBlank() && File(last).isDirectory) dialog.directory = last
+                    if (suggested != null) dialog.file = suggested
+                    dialog.isVisible = true
+                    val file = dialog.file
+                    val directory = dialog.directory
+                    if (file == null || directory == null) null else File(directory, file)
+                } finally {
+                    dialog.dispose()
+                }
+            }
+        } ?: return null
+
+        preferences.put("lastDirectory", selected.parent ?: selected.absolutePath)
+        return selected.absolutePath
+    }
+
+    private fun <T> onEventThread(block: () -> T): T {
+        if (SwingUtilities.isEventDispatchThread()) return block()
+        var outcome: Result<T>? = null
+        SwingUtilities.invokeAndWait { outcome = runCatching(block) }
+        return checkNotNull(outcome) { "AWT event thread did not run the dialog task" }.getOrThrow()
     }
 
     companion object {

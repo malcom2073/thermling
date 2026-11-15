@@ -37,6 +37,26 @@ class ThermlingAppUiTest {
     }
 
     @Test
+    fun addingAnImageFromTheToolbarRunsThePickerOffTheUiThread() = runComposeUiTest {
+        val platform = TestPlatform()
+        platform.imageToPick = com.thermling.platform.PickedImage(
+            path = "/tmp/thermling-test.png",
+            name = "thermling-test.png",
+            base64 = "dGVzdA==",
+            width = 10,
+            height = 10,
+        )
+        val state = ThermlingState(platform)
+        setContent { ThermlingTheme { ThermlingApp(state) } }
+
+        onNodeWithTag("add-image-top").assertIsDisplayed().performClick()
+
+        waitUntil(timeoutMillis = 5_000) { state.document.elements.size == 1 }
+        assertTrue(state.document.elements.single() is com.thermling.model.ImageElement)
+        assertNotNull(state.selectedElement)
+    }
+
+    @Test
     fun addingABarcodeFromTheToolbarUpdatesStateAndPreview() = runComposeUiTest {
         val state = ThermlingState(TestPlatform())
         setContent { ThermlingTheme { ThermlingApp(state) } }

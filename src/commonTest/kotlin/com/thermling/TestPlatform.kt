@@ -23,6 +23,7 @@ expect class TestPlatform : Platform {
     var failWrites: Boolean
     var scanResults: List<BluetoothDeviceInfo>
     var failScan: Boolean
+    var imageToPick: PickedImage?
 
     constructor()
 

@@ -16,6 +16,8 @@ import com.thermling.protocol.printableWidthMm
 import com.thermling.render.RenderResult
 import com.thermling.transport.FakeTransport
 import com.thermling.transport.PrinterTransport
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.awt.image.BufferedImage
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -31,6 +33,7 @@ actual class TestPlatform : Platform {
     actual var failWrites = false
     actual var scanResults: List<BluetoothDeviceInfo> = emptyList()
     actual var failScan = false
+    actual var imageToPick: PickedImage? = null
 
     actual constructor()
 
@@ -59,7 +62,12 @@ actual class TestPlatform : Platform {
 
     actual override fun decodeImage(base64: String): ImageBitmap? = null
 
-    actual override suspend fun chooseImage(): PickedImage? = null
+    actual override suspend fun chooseImage(): PickedImage? {
+        val picked = imageToPick ?: return null
+        // Mirror DesktopPlatform.chooseImage: the real picker shows a modal dialog on the AWT
+        // event thread, so the coroutine must never run on Compose's UI dispatcher.
+        return withContext(Dispatchers.IO) { picked }
+    }
 
     actual override suspend fun openDocumentDialog(): String? = openPath
 
