@@ -167,6 +167,7 @@ class ThermlingStateTest {
     @Test
     fun applyingLandscapePresetSwapsElementGeometryAndPageSize() {
         val state = ThermlingState(TestPlatform())
+        state.changeOrientation(Orientation.PORTRAIT)
         state.addText()
         val before = state.document.elements.single()
         val landscape = com.thermling.model.LABEL_PRESETS.first {

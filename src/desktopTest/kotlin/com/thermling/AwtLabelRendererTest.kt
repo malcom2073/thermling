@@ -28,15 +28,15 @@ class AwtLabelRendererTest {
     }
 
     @Test
-    fun blankPortraitLabelIsAllWhiteAndFitsTheHead() {
+    fun blankDefaultLabelIsAllWhiteAndFitsTheHead() {
         val result = AwtLabelRenderer().render(LabelDocument(), 203, 12.0, 0.0, 0.0)
         assertEquals(96, result.widthDots)
         assertEquals(320, result.heightDots)
         assertEquals(12, result.rowBytes)
         assertEquals(3840, result.data.size)
         assertTrue(result.data.all { it == 0xFF.toByte() })
-        assertEquals(96, result.preview.width)
-        assertEquals(320, result.preview.height)
+        assertEquals(320, result.preview.width)
+        assertEquals(96, result.preview.height)
         assertEquals("threshold", result.halftone)
     }
 

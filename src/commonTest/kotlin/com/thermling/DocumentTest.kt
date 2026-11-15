@@ -176,7 +176,7 @@ class DocumentTest {
 
     @Test
     fun pageSizeFollowsHeadWidthAndOrientation() {
-        val portrait = LabelDocument(widthMm = 14.0, lengthMm = 40.0)
+        val portrait = LabelDocument(widthMm = 14.0, lengthMm = 40.0, orientation = Orientation.PORTRAIT)
         assertEquals(12.0 to 40.0, portrait.pageSizeMm(12.0))
         val landscape = portrait.copy(orientation = Orientation.LANDSCAPE)
         assertEquals(40.0 to 12.0, landscape.pageSizeMm(12.0))
@@ -187,7 +187,7 @@ class DocumentTest {
     @Test
     fun duplicateCreatesANewElementInsideThePage() {
         val element = TextElement(id = "one", xMm = 9.0, yMm = 9.0, widthMm = 5.0, heightMm = 5.0)
-        val document = LabelDocument(elements = listOf(element))
+        val document = LabelDocument(orientation = Orientation.PORTRAIT, elements = listOf(element))
         val duplicate = document.duplicate("one", headWidthMm = 12.0)
         assertEquals(2, duplicate.elements.size)
         val copied = duplicate.elements.last()
@@ -212,9 +212,13 @@ class DocumentTest {
     @Test
     fun presetNamesAndDefaultsAreStable() {
         val document = LabelDocument()
-        val preset = com.thermling.model.LABEL_PRESETS.first()
-        assertEquals("P21 stock — 14 × 40 mm", preset.name)
-        assertTrue(document.matchesPreset(preset))
-        assertNotNull(LabelDocument.fromPreset(preset))
+        val vertical = com.thermling.model.LABEL_PRESETS.first()
+        assertEquals("P21 stock — 14 × 40 mm", vertical.name)
+        assertEquals(Orientation.LANDSCAPE, document.orientation)
+        val horizontal = com.thermling.model.LABEL_PRESETS.single {
+            it.name == "P21 stock — 40 × 14 mm horizontal"
+        }
+        assertTrue(document.matchesPreset(horizontal))
+        assertNotNull(LabelDocument.fromPreset(vertical))
     }
 }

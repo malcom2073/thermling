@@ -163,7 +163,7 @@ data class LabelDocument(
     val lengthMm: Double = 40.0,
     val gapMm: Double = 5.0,
     val style: Style = Style.GAPPED,
-    val orientation: Orientation = Orientation.PORTRAIT,
+    val orientation: Orientation = Orientation.LANDSCAPE,
     val halftone: Halftone = Halftone.AUTO,
     val thermalCorrection: Boolean = false,
     val elements: List<LabelElement> = emptyList(),

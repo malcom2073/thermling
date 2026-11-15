@@ -21,8 +21,9 @@ Linux desktop app and as an Android app.
 ## What works in this MVP
 
 - 14 × 40 mm P21 stock by default, with the 12 mm print-head width cap.
-- Vertical and horizontal page layouts; horizontal labels are rotated into the
-  printer's fixed head orientation and rotated back for the preview.
+- Horizontal (landscape) page layout by default; vertical labels are also
+  supported, and horizontal labels are rotated into the printer's fixed head
+  orientation and rotated back for the preview.
 - Text, embedded PNG images, and barcodes with drag-to-move, resize handle,
   alignment, styling, and line spacing.
 - Linear barcodes (Code 128, Code 39, EAN-13, EAN-8, UPC-A) and QR Codes with
